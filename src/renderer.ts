@@ -88,7 +88,10 @@ export class PlainLogRenderer implements Renderer {
     }
     this.#seenLogs = snapshot.logs.length;
 
-    for (const row of flattenTasks(snapshot.tasks).slice(0, this.maxRows)) {
+    const rows = flattenTasks(snapshot.tasks).slice(0, this.maxRows);
+    pruneSeenTaskStates(this.#seenTaskStates, rows);
+
+    for (const row of rows) {
       const state = `${row.status}:${row.message ?? ""}:${row.detail ?? ""}:${progressText(
         row,
         this.theme,
@@ -110,13 +113,15 @@ export class JsonEventRenderer implements Renderer {
 
   render(snapshot: RuntimeSnapshot): Frame {
     const events: LaquEvent[] = [];
+    const tasks = flattenTasks(snapshot.tasks);
+    pruneSeenTaskStates(this.#seenTaskStates, tasks);
 
     for (const log of snapshot.logs.slice(this.#seenLogs)) {
       events.push(logEvent(log.message, log.createdAt));
     }
     this.#seenLogs = snapshot.logs.length;
 
-    for (const task of flattenTasks(snapshot.tasks)) {
+    for (const task of tasks) {
       const ratio = task.aggregate.kind === "ratio" ? task.aggregate.ratio : undefined;
       const overrun = task.aggregate.kind === "ratio" ? task.aggregate.overrun : undefined;
       const state = `${task.status}:${task.message ?? ""}:${task.detail ?? ""}:${task.aggregate.kind}:${
@@ -129,10 +134,7 @@ export class JsonEventRenderer implements Renderer {
       events.push(taskEvent(task));
     }
 
-    if (
-      events.length > 0 &&
-      flattenTasks(snapshot.tasks).every((task) => task.status !== "running")
-    ) {
+    if (events.length > 0 && tasks.every((task) => task.status !== "running")) {
       events.push(summaryEvent(snapshot.tasks, snapshot.createdAt));
     }
 
@@ -169,6 +171,18 @@ function flattenTasks(tasks: readonly TaskSnapshot[]): TaskSnapshot[] {
     rows.push(...flattenTasks(task.children));
   }
   return rows;
+}
+
+function pruneSeenTaskStates(
+  seenTaskStates: Map<string, string>,
+  currentTasks: readonly TaskSnapshot[],
+): void {
+  const currentIds = new Set(currentTasks.map((task) => task.id));
+  for (const id of seenTaskStates.keys()) {
+    if (!currentIds.has(id)) {
+      seenTaskStates.delete(id);
+    }
+  }
 }
 
 function renderTaskRow(task: TaskSnapshot, theme: CompiledTheme, columns: number): string {

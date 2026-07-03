@@ -62,6 +62,21 @@ await progress.close();
 
 Logs are separate scrollback records. They are not rendered as task rows and they pass through the same output coordinator as progress frames so live regions and log lines do not corrupt each other.
 
+## Process Lifecycle
+
+`laqu` does not install process-level signal or exception handlers by default. Applications that
+already own shutdown should keep the default and call `progress.close()` from their own cleanup
+path.
+
+Short-lived CLI commands that want `laqu` to flush progress output during `SIGINT`, `SIGTERM`,
+`uncaughtException`, or `unhandledRejection` can opt in:
+
+```ts
+const progress = createLaqu({
+  manageProcessLifecycle: true,
+});
+```
+
 ## Public Imports
 
 The root import exposes the stable runtime API and common helpers:
@@ -177,11 +192,11 @@ bun run example:basic
 
 ## Release
 
-GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v1.0.2` for version `1.0.2`.
+GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v1.0.3` for version `1.0.3`.
 
 ```sh
-git tag -a v1.0.2 -m "v1.0.2"
-git push origin main v1.0.2
+git tag -a v1.0.3 -m "v1.0.3"
+git push origin main v1.0.3
 ```
 
 The npm package must define a Trusted Publisher connection for GitHub Actions with organization/user `0disoft`, repository `laqu`, workflow filename `release.yml`, no environment name, and `npm publish` allowed. On a matching tag push, the workflow installs dependencies, checks the package, runs a dry pack verification, publishes `@0disoft/laqu` to npm through OIDC, and creates a GitHub Release with generated notes.

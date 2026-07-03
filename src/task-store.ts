@@ -96,6 +96,9 @@ export class TaskStore {
 
   update(id: string, update: Partial<Omit<TaskNode, "id" | "parentId" | "children">>): void {
     const node = this.#requireNode(id);
+    if (isTerminalStatus(node.status)) {
+      return;
+    }
     if (update.title !== undefined) {
       node.title = update.title;
     }
@@ -258,6 +261,12 @@ function aggregateFromProgress(progress: ProgressState): AggregateProgress {
     case "none":
       return { kind: "none" };
   }
+}
+
+function isTerminalStatus(status: TaskStatus): boolean {
+  return (
+    status === "succeeded" || status === "failed" || status === "skipped" || status === "cancelled"
+  );
 }
 
 function assertFiniteNonNegative(value: number, name: string): void {

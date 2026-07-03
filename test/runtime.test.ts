@@ -1,4 +1,4 @@
-import { rejects, strictEqual } from "node:assert";
+import { deepStrictEqual, rejects, strictEqual } from "node:assert";
 import test from "node:test";
 
 import { createLaqu } from "../src/index.js";
@@ -115,6 +115,67 @@ test("scoped task marks failure and rethrows original error", async () => {
   strictEqual(stderr.text().includes("boom"), true);
 });
 
+test("aborted scoped task is not overwritten by callback success", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({
+    stderr,
+    env: {},
+    format: "ndjson",
+    streamCapability: "pipe",
+  });
+  const controller = new AbortController();
+
+  const result = await runtime.task("abort scope", { signal: controller.signal }, async () => {
+    controller.abort();
+    return 7;
+  });
+  await runtime.close();
+
+  const taskEvents = stderr
+    .text()
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map(
+      (line) =>
+        JSON.parse(line) as {
+          readonly type?: string;
+          readonly task?: { readonly status?: string };
+        },
+    )
+    .filter((event) => event.type === "task");
+  const finalTaskEvent = taskEvents.at(-1);
+  strictEqual(result, 7);
+  strictEqual(finalTaskEvent?.task?.status, "cancelled");
+});
+
+test("process lifecycle handlers are opt-in and disposed on close", async () => {
+  const before = processLifecycleListenerCounts();
+  const defaultRuntime = createLaqu({
+    stderr: new FakeStream(),
+    env: {},
+    streamCapability: "pipe",
+  });
+  await defaultRuntime.close();
+  deepStrictEqual(processLifecycleListenerCounts(), before);
+
+  const managedRuntime = createLaqu({
+    stderr: new FakeStream(),
+    env: {},
+    streamCapability: "pipe",
+    manageProcessLifecycle: true,
+  });
+  deepStrictEqual(processLifecycleListenerCounts(), {
+    SIGINT: before.SIGINT + 1,
+    SIGTERM: before.SIGTERM + 1,
+    uncaughtException: before.uncaughtException + 1,
+    unhandledRejection: before.unhandledRejection + 1,
+  });
+
+  await managedRuntime.close();
+  deepStrictEqual(processLifecycleListenerCounts(), before);
+});
+
 test("dirty progress updates coalesce until explicit flush", async () => {
   const stderr = new FakeStream();
   const runtime = createLaqu({ stderr, env: {}, streamCapability: "pipe" });
@@ -146,3 +207,17 @@ test("burst progress updates do not emit one frame per mutation", async () => {
   strictEqual(stderr.text().includes("100%"), true);
   await runtime.close();
 });
+
+function processLifecycleListenerCounts(): {
+  readonly SIGINT: number;
+  readonly SIGTERM: number;
+  readonly uncaughtException: number;
+  readonly unhandledRejection: number;
+} {
+  return {
+    SIGINT: process.listenerCount("SIGINT"),
+    SIGTERM: process.listenerCount("SIGTERM"),
+    uncaughtException: process.listenerCount("uncaughtException"),
+    unhandledRejection: process.listenerCount("unhandledRejection"),
+  };
+}

@@ -81,3 +81,18 @@ test("ratio progress clamps negative and overrun values", () => {
   deepStrictEqual(ratioProgress(-1), { kind: "ratio", ratio: 0, overrun: false });
   deepStrictEqual(ratioProgress(2), { kind: "ratio", ratio: 1, overrun: true });
 });
+
+test("terminal task status cannot be overwritten", () => {
+  const store = new TaskStore();
+  const id = store.createTask("terminal");
+
+  store.update(id, { status: "cancelled", message: "aborted" });
+  store.update(id, { status: "succeeded", message: "done" });
+  store.update(id, { progress: setTotalProgress(10, 10), detail: "late" });
+
+  const task = store.snapshot().tasks[0];
+  strictEqual(task?.status, "cancelled");
+  strictEqual(task?.message, "aborted");
+  strictEqual(task?.progress.kind, "none");
+  strictEqual(task?.detail, undefined);
+});

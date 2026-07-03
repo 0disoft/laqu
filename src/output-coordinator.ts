@@ -129,7 +129,10 @@ export class OutputCoordinator {
       return;
     }
     const accepted = this.target.write(chunk);
-    if (accepted) {
+    if (accepted !== false) {
+      return;
+    }
+    if (this.target.on === undefined || this.target.off === undefined) {
       return;
     }
     this.#waitingForDrain = true;

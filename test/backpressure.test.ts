@@ -21,6 +21,38 @@ class BackpressureStream extends EventEmitter implements StreamTarget {
   }
 }
 
+class UnsupportedBackpressureStream implements StreamTarget {
+  readonly chunks: string[] = [];
+  failNext = true;
+
+  write(chunk: string): boolean {
+    this.chunks.push(chunk);
+    if (this.failNext) {
+      this.failNext = false;
+      return false;
+    }
+    return true;
+  }
+}
+
+class MissingOffBackpressureStream implements StreamTarget {
+  readonly chunks: string[] = [];
+  failNext = true;
+
+  write(chunk: string): boolean {
+    this.chunks.push(chunk);
+    if (this.failNext) {
+      this.failNext = false;
+      return false;
+    }
+    return true;
+  }
+
+  on(): unknown {
+    throw new Error("drain listener should not be registered without off");
+  }
+}
+
 const renderer: Renderer = {
   render(snapshot: RuntimeSnapshot) {
     return { kind: "plain", lines: [`snapshot-${snapshot.createdAt}`] };
@@ -57,4 +89,30 @@ test("backpressure collapses burst frames while waiting for drain", async () => 
   const output = stream.chunks.join("");
   strictEqual(output.includes("snapshot-999"), false);
   strictEqual(output.includes("snapshot-1000"), true);
+});
+
+test("unsupported custom backpressure stream does not block flush", async () => {
+  const stream = new UnsupportedBackpressureStream();
+  const coordinator = new OutputCoordinator(stream, renderer, false);
+
+  coordinator.render({ tasks: [], logs: [], createdAt: 1 });
+  coordinator.render({ tasks: [], logs: [], createdAt: 2 });
+  await coordinator.flush();
+
+  const output = stream.chunks.join("");
+  strictEqual(output.includes("snapshot-1"), true);
+  strictEqual(output.includes("snapshot-2"), true);
+});
+
+test("drain listener is not registered when cleanup is unavailable", async () => {
+  const stream = new MissingOffBackpressureStream();
+  const coordinator = new OutputCoordinator(stream, renderer, false);
+
+  coordinator.render({ tasks: [], logs: [], createdAt: 1 });
+  coordinator.render({ tasks: [], logs: [], createdAt: 2 });
+  await coordinator.flush();
+
+  const output = stream.chunks.join("");
+  strictEqual(output.includes("snapshot-1"), true);
+  strictEqual(output.includes("snapshot-2"), true);
 });

@@ -43,7 +43,7 @@ export function createProgressRuntime(options: RuntimeOptions = {}): ProgressRun
   const store = new TaskStore();
   const coordinator = new OutputCoordinator(stderr, decision.renderer, decision.live);
   const runtime = new LaquRuntime(store, coordinator, policy);
-  if (options.manageProcessLifecycle !== false) {
+  if (options.manageProcessLifecycle === true) {
     runtime.manageProcessLifecycle();
   }
   return runtime;
@@ -51,6 +51,8 @@ export function createProgressRuntime(options: RuntimeOptions = {}): ProgressRun
 
 class LaquRuntime implements ProgressRuntime {
   #timer: ReturnType<typeof setTimeout> | undefined;
+  #flushPromise: Promise<void> | undefined;
+  #closePromise: Promise<void> | undefined;
   #dirty = false;
   #closed = false;
   #processLifecycle: ProcessLifecycleLease | undefined;
@@ -81,6 +83,9 @@ class LaquRuntime implements ProgressRuntime {
     const handle = this.createTask(title, options);
     const onAbort = () => handle.cancel("aborted");
     options.signal?.addEventListener("abort", onAbort, { once: true });
+    if (options.signal?.aborted === true) {
+      handle.cancel("aborted");
+    }
     try {
       const result = await callback(handle);
       handle.succeed();
@@ -111,16 +116,36 @@ class LaquRuntime implements ProgressRuntime {
   }
 
   async flush(): Promise<void> {
-    if (this.#timer !== undefined) {
-      clearTimeout(this.#timer);
-      this.#timer = undefined;
-    }
-    this.#dirty = false;
-    this.coordinator.render(this.store.snapshot());
-    await this.coordinator.flush();
+    this.#flushPromise ??= this.#flushOnce().finally(() => {
+      this.#flushPromise = undefined;
+    });
+    await this.#flushPromise;
   }
 
   async close(): Promise<void> {
+    this.#closePromise ??= this.#closeOnce();
+    await this.#closePromise;
+  }
+
+  manageProcessLifecycle(): void {
+    this.#processLifecycle ??= new ProcessLifecycleLease(() => {
+      return this.close();
+    });
+  }
+
+  async #flushOnce(): Promise<void> {
+    do {
+      if (this.#timer !== undefined) {
+        clearTimeout(this.#timer);
+        this.#timer = undefined;
+      }
+      this.#dirty = false;
+      this.coordinator.render(this.store.snapshot());
+      await this.coordinator.flush();
+    } while (this.#dirty && !this.#closed && this.policy !== "silent" && this.policy !== "never");
+  }
+
+  async #closeOnce(): Promise<void> {
     if (this.#closed) {
       return;
     }
@@ -129,12 +154,6 @@ class LaquRuntime implements ProgressRuntime {
     await this.flush();
     await this.coordinator.close();
     this.#closed = true;
-  }
-
-  manageProcessLifecycle(): void {
-    this.#processLifecycle ??= new ProcessLifecycleLease(() => {
-      return this.close();
-    });
   }
 
   private markDirty(immediate = false): void {
@@ -180,9 +199,13 @@ class ProcessLifecycleLease {
         });
       });
     };
-    this.#onRejection = () => {
+    this.#onRejection = (reason) => {
       process.exitCode = 1;
-      void cleanup();
+      void cleanup().finally(() => {
+        setImmediate(() => {
+          throw reason instanceof Error ? reason : new Error("Unhandled promise rejection");
+        });
+      });
     };
     process.once("SIGINT", this.#onSignal);
     process.once("SIGTERM", this.#onSignal);
