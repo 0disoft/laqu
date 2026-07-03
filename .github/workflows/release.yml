@@ -1,0 +1,81 @@
+name: Release
+
+"on":
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24.x"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check tag and package metadata
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+
+          const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+          const expectedTag = `v${pkg.version}`;
+          const actualTag = process.env.GITHUB_REF_NAME;
+
+          if (actualTag !== expectedTag) {
+            console.error(`Tag ${actualTag} does not match package version ${expectedTag}.`);
+            process.exit(1);
+          }
+
+          if (pkg.name !== "@0disoft/laqu") {
+            console.error(`Unexpected package name: ${pkg.name}`);
+            process.exit(1);
+          }
+
+          if (pkg.publishConfig?.access !== "public") {
+            console.error("package.json must set publishConfig.access to public.");
+            process.exit(1);
+          }
+          NODE
+
+      - name: Check package
+        run: bun run check
+
+      - name: Check packed package
+        run: bun run pack:check
+
+      - name: Publish to npm
+        run: npm publish --access public
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes

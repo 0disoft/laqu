@@ -45,6 +45,9 @@
       "import": "./dist/width-entry.js"
     }
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "bun run clean && tsc -p tsconfig.build.json",
     "check": "bun run typecheck && bun run lint && bun run format:check && bun run test && bun run build",

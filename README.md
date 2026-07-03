@@ -174,3 +174,14 @@ bun run example:basic
 `bun run check` runs strict typecheck, OXC lint, OXC format check, Node.js built-in tests, and build output generation.
 `bun run pack:check` builds the package, runs an ESM consumer fixture through package self-reference imports, and verifies the package contents with `npm pack --dry-run --json`.
 `bun run example:basic` builds the package and runs a small live progress demo. Terminal scrollback keeps the final frame; watch the command while it runs to see the bar animate in place.
+
+## Release
+
+GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v1.0.2` for version `1.0.2`.
+
+```sh
+git tag -a v1.0.2 -m "v1.0.2"
+git push origin main v1.0.2
+```
+
+The npm package must define a Trusted Publisher connection for GitHub Actions with organization/user `0disoft`, repository `laqu`, workflow filename `release.yml`, no environment name, and `npm publish` allowed. On a matching tag push, the workflow installs dependencies, checks the package, runs a dry pack verification, publishes `@0disoft/laqu` to npm through OIDC, and creates a GitHub Release with generated notes.
