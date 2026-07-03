@@ -1,0 +1,9 @@
+[install]
+auto = "disable"
+exact = true
+saveTextLockfile = true
+
+[test]
+coverage = false
+coverageSkipTestFiles = true
+

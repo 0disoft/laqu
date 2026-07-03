@@ -1,0 +1,55 @@
+{
+  "name": "laqu",
+  "version": "0.0.0",
+  "description": "Terminal progress bars and live CLI rendering primitives for TypeScript.",
+  "keywords": [
+    "cli",
+    "library",
+    "live-rendering",
+    "progress-bar",
+    "terminal",
+    "tui",
+    "typescript"
+  ],
+  "homepage": "https://github.com/0disoft/laqu#readme",
+  "bugs": {
+    "url": "https://github.com/0disoft/laqu/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0disoft/laqu.git"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "bun run clean && tsc -p tsconfig.build.json",
+    "check": "bun run typecheck && bun run lint && bun run format:check && bun run test && bun run build",
+    "clean": "node -e \"const fs = require('node:fs'); for (const p of ['dist', 'dist-test', 'coverage']) fs.rmSync(p, { recursive: true, force: true });\"",
+    "format": "oxfmt --write .",
+    "format:check": "oxfmt --check .",
+    "lint": "oxlint src test",
+    "test": "bun run build:test && node --test \"dist-test/test/**/*.test.js\"",
+    "build:test": "tsc -p tsconfig.test.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "oxfmt": "0.57.0",
+    "oxlint": "1.72.0",
+    "typescript": "6.0.3"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}
