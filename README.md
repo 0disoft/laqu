@@ -7,7 +7,7 @@ It treats stdout as the data channel and sends progress, status, logs, human ren
 ## Install
 
 ```sh
-bun add laqu
+bun add @0disoft/laqu
 ```
 
 The published package targets Node.js 24+ and does not require Bun, Deno, Rust, native addons, WASM, or C++ bindings at runtime.
@@ -15,7 +15,7 @@ The published package targets Node.js 24+ and does not require Bun, Deno, Rust, 
 ## Scoped Tasks
 
 ```ts
-import { createLaqu } from "laqu";
+import { createLaqu } from "@0disoft/laqu";
 
 const progress = createLaqu();
 
@@ -34,7 +34,7 @@ Scoped tasks mark themselves as succeeded when the callback resolves. If the cal
 ## Manual Tasks
 
 ```ts
-import { createProgressRuntime } from "laqu";
+import { createProgressRuntime } from "@0disoft/laqu";
 
 const progress = createProgressRuntime();
 const build = progress.createTask("build", { total: 3 });
@@ -67,15 +67,15 @@ Logs are separate scrollback records. They are not rendered as task rows and the
 The root import exposes the stable runtime API and common helpers:
 
 ```ts
-import { createLaqu, displayWidth } from "laqu";
+import { createLaqu, displayWidth } from "@0disoft/laqu";
 ```
 
 Focused subpath exports are available for narrower consumers:
 
 ```ts
-import { LAQU_EVENT_SCHEMA_VERSION } from "laqu/events";
-import { compileTheme } from "laqu/theme";
-import { displayWidth } from "laqu/width";
+import { LAQU_EVENT_SCHEMA_VERSION } from "@0disoft/laqu/events";
+import { compileTheme } from "@0disoft/laqu/theme";
+import { displayWidth } from "@0disoft/laqu/width";
 ```
 
 ## Output Contract
@@ -149,7 +149,7 @@ Theme tokens are semantic: success symbols, running symbols, progress glyphs, in
 `laqu` includes a pure TypeScript width engine:
 
 ```ts
-import { displayWidth, truncateToColumns, wrapToColumns } from "laqu";
+import { displayWidth, truncateToColumns, wrapToColumns } from "@0disoft/laqu";
 
 displayWidth("\u001b[31m한글\u001b[0m"); // 4
 truncateToColumns("👩‍💻 building", 8, { overflowMarker: "..." });

@@ -1,6 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 
-import { createLaqu } from "laqu";
+import { createLaqu } from "@0disoft/laqu";
 
 const progress = createLaqu({
   maxRows: 8,

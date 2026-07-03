@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "laqu",
+      "name": "@0disoft/laqu",
       "devDependencies": {
         "@types/node": "24.10.1",
         "oxfmt": "0.57.0",

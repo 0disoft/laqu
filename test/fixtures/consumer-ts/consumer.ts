@@ -4,10 +4,10 @@ import {
   text,
   type ProgressRuntime,
   type RenderableSegment,
-} from "laqu";
-import { LAQU_EVENT_SCHEMA, LAQU_EVENT_SCHEMA_VERSION, type LaquEvent } from "laqu/events";
-import { compileTheme, type CompiledTheme } from "laqu/theme";
-import { displayWidth, tokenizeAnsi, type AnsiToken, type WidthOptions } from "laqu/width";
+} from "@0disoft/laqu";
+import { LAQU_EVENT_SCHEMA, LAQU_EVENT_SCHEMA_VERSION, type LaquEvent } from "@0disoft/laqu/events";
+import { compileTheme, type CompiledTheme } from "@0disoft/laqu/theme";
+import { displayWidth, tokenizeAnsi, type AnsiToken, type WidthOptions } from "@0disoft/laqu/width";
 
 const runtime: ProgressRuntime = createLaqu({
   format: "json",

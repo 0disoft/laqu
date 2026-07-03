@@ -1,7 +1,7 @@
-import { createLaqu } from "laqu";
-import { LAQU_EVENT_SCHEMA_VERSION } from "laqu/events";
-import { compileTheme } from "laqu/theme";
-import { displayWidth } from "laqu/width";
+import { createLaqu } from "@0disoft/laqu";
+import { LAQU_EVENT_SCHEMA_VERSION } from "@0disoft/laqu/events";
+import { compileTheme } from "@0disoft/laqu/theme";
+import { displayWidth } from "@0disoft/laqu/width";
 
 if (typeof createLaqu !== "function") {
   throw new TypeError("createLaqu export is not callable");

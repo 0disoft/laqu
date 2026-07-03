@@ -1,6 +1,6 @@
 {
-  "name": "laqu",
-  "version": "1.0.0",
+  "name": "@0disoft/laqu",
+  "version": "1.0.1",
   "description": "Reliable terminal progress and live CLI rendering primitives for TypeScript.",
   "keywords": [
     "cli",
