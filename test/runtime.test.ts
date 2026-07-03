@@ -43,6 +43,8 @@ test("json progress events still use status stream by default", async () => {
   await runtime.close();
 
   strictEqual(stdout.text(), "");
+  strictEqual(stderr.text().includes('"schema":"laqu.event"'), true);
+  strictEqual(stderr.text().includes('"version":1'), true);
   strictEqual(stderr.text().includes('"type":"task"'), true);
 });
 

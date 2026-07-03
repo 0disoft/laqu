@@ -62,6 +62,22 @@ await progress.close();
 
 Logs are separate scrollback records. They are not rendered as task rows and they pass through the same output coordinator as progress frames so live regions and log lines do not corrupt each other.
 
+## Public Imports
+
+The root import exposes the stable runtime API and common helpers:
+
+```ts
+import { createLaqu, displayWidth } from "laqu";
+```
+
+Focused subpath exports are available for narrower consumers:
+
+```ts
+import { LAQU_EVENT_SCHEMA_VERSION } from "laqu/events";
+import { compileTheme } from "laqu/theme";
+import { displayWidth } from "laqu/width";
+```
+
 ## Output Contract
 
 By default:
@@ -79,6 +95,28 @@ const progress = createLaqu({
   stderr: process.stderr,
 });
 ```
+
+Machine-readable progress events use a versioned schema:
+
+```json
+{
+  "schema": "laqu.event",
+  "version": 1,
+  "type": "task",
+  "task": {
+    "id": "task-1",
+    "title": "download",
+    "status": "running",
+    "progress": {
+      "kind": "ratio",
+      "ratio": 0.5,
+      "overrun": false
+    }
+  }
+}
+```
+
+Event schema version `1` is exported as `LAQU_EVENT_SCHEMA_VERSION`.
 
 The selection axes are independent:
 
@@ -129,6 +167,8 @@ Do not mix child process output with live rendering through `stdio: "inherit"`. 
 ```sh
 bun install
 bun run check
+bun run pack:check
 ```
 
 `bun run check` runs strict typecheck, OXC lint, OXC format check, Node.js built-in tests, and build output generation.
+`bun run pack:check` builds the package, runs an ESM consumer fixture through package self-reference imports, and verifies the package contents with `npm pack --dry-run --json`.

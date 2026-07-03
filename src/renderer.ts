@@ -1,3 +1,4 @@
+import { logEvent, summaryEvent, taskEvent, type LaquEvent } from "./events.js";
 import { renderSegments, text, type CompiledTheme } from "./theme.js";
 import type { OutputFormat, ProgressPolicy, StreamCapability } from "./types.js";
 import { truncateToColumns } from "./width.js";
@@ -6,20 +7,8 @@ import type { RuntimeSnapshot, TaskSnapshot, TaskStatus } from "./task-store.js"
 export type Frame =
   | { readonly kind: "live"; readonly lines: readonly string[] }
   | { readonly kind: "plain"; readonly lines: readonly string[] }
-  | { readonly kind: "json"; readonly events: readonly JsonEvent[] }
+  | { readonly kind: "json"; readonly events: readonly LaquEvent[] }
   | { readonly kind: "none" };
-
-export interface JsonEvent {
-  readonly type: "task" | "log" | "summary";
-  readonly id?: string | undefined;
-  readonly title?: string | undefined;
-  readonly status?: TaskStatus | undefined;
-  readonly progressKind?: string | undefined;
-  readonly ratio?: number | undefined;
-  readonly message?: string | undefined;
-  readonly detail?: string | undefined;
-  readonly createdAt: number;
-}
 
 export interface Renderer {
   render(snapshot: RuntimeSnapshot): Frame;
@@ -117,33 +106,31 @@ export class JsonEventRenderer implements Renderer {
   #seenLogs = 0;
 
   render(snapshot: RuntimeSnapshot): Frame {
-    const events: JsonEvent[] = [];
+    const events: LaquEvent[] = [];
 
     for (const log of snapshot.logs.slice(this.#seenLogs)) {
-      events.push({ type: "log", message: log.message, createdAt: log.createdAt });
+      events.push(logEvent(log.message, log.createdAt));
     }
     this.#seenLogs = snapshot.logs.length;
 
     for (const task of flattenTasks(snapshot.tasks)) {
       const ratio = task.aggregate.kind === "ratio" ? task.aggregate.ratio : undefined;
+      const overrun = task.aggregate.kind === "ratio" ? task.aggregate.overrun : undefined;
       const state = `${task.status}:${task.message ?? ""}:${task.detail ?? ""}:${task.aggregate.kind}:${
         ratio ?? ""
-      }`;
+      }:${overrun ?? ""}`;
       if (this.#seenTaskStates.get(task.id) === state) {
         continue;
       }
       this.#seenTaskStates.set(task.id, state);
-      events.push({
-        type: "task",
-        id: task.id,
-        title: task.title,
-        status: task.status,
-        progressKind: task.aggregate.kind,
-        ratio,
-        message: task.message,
-        detail: task.detail,
-        createdAt: task.updatedAt,
-      });
+      events.push(taskEvent(task));
+    }
+
+    if (
+      events.length > 0 &&
+      flattenTasks(snapshot.tasks).every((task) => task.status !== "running")
+    ) {
+      events.push(summaryEvent(snapshot.tasks, snapshot.createdAt));
     }
 
     return events.length === 0 ? { kind: "none" } : { kind: "json", events };

@@ -11,6 +11,7 @@ export class TerminalLease {
   renderTimer: ReturnType<typeof setTimeout> | undefined;
   pendingFrame: Frame | undefined;
   partialLineKnownByUs = false;
+  lastLiveLines: readonly string[] = [];
 }
 
 export class OutputCoordinator {
@@ -62,9 +63,9 @@ export class OutputCoordinator {
     }
     await this.flush();
     if (this.live && this.lease.renderedLineCount > 0) {
-      this.#writeRaw("\u001b[0m\n");
+      this.#writeRaw(`${this.#showCursor()}\u001b[0m\n`);
     } else {
-      this.#writeRaw("\u001b[0m");
+      this.#writeRaw(`${this.#showCursor()}\u001b[0m`);
     }
     this.lease.closed = true;
     this.lease.renderedLineCount = 0;
@@ -72,6 +73,7 @@ export class OutputCoordinator {
     this.lease.activeBars = 0;
     this.lease.pendingFrame = undefined;
     this.lease.partialLineKnownByUs = false;
+    this.lease.lastLiveLines = [];
   }
 
   #writeNow(frame: Frame): void {
@@ -91,11 +93,32 @@ export class OutputCoordinator {
   }
 
   #writeLive(lines: readonly string[]): void {
+    if (sameLines(lines, this.lease.lastLiveLines)) {
+      return;
+    }
+    const cursor = this.#hideCursor();
     const clear = this.lease.renderedLineCount > 0 ? eraseLines(this.lease.renderedLineCount) : "";
-    const chunk = `${clear}${lines.join("\n")}\u001b[0m`;
+    const chunk = `${cursor}${clear}${lines.join("\n")}\u001b[0m`;
     this.lease.renderedLineCount = lines.length;
     this.lease.partialLineKnownByUs = lines.length > 0;
+    this.lease.lastLiveLines = [...lines];
     this.#writeRaw(chunk);
+  }
+
+  #hideCursor(): string {
+    if (!this.live || this.lease.cursorHiddenByUs > 0) {
+      return "";
+    }
+    this.lease.cursorHiddenByUs += 1;
+    return "\u001b[?25l";
+  }
+
+  #showCursor(): string {
+    if (!this.live || this.lease.cursorHiddenByUs === 0) {
+      return "";
+    }
+    this.lease.cursorHiddenByUs = 0;
+    return "\u001b[?25h";
   }
 
   #writeRaw(chunk: string): void {
@@ -122,6 +145,10 @@ export class OutputCoordinator {
       this.target.on?.("drain", onDrain);
     });
   }
+}
+
+function sameLines(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((line, index) => line === right[index]);
 }
 
 function eraseLines(count: number): string {

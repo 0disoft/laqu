@@ -30,6 +30,18 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./events": {
+      "types": "./dist/events-entry.d.ts",
+      "import": "./dist/events-entry.js"
+    },
+    "./theme": {
+      "types": "./dist/theme-entry.d.ts",
+      "import": "./dist/theme-entry.js"
+    },
+    "./width": {
+      "types": "./dist/width-entry.d.ts",
+      "import": "./dist/width-entry.js"
     }
   },
   "scripts": {
@@ -40,6 +52,7 @@
     "format:check": "oxfmt --check .",
     "lint": "oxlint src test",
     "test": "bun run build:test && node --test \"dist-test/test/**/*.test.js\"",
+    "pack:check": "bun run build && node test/fixtures/consumer-esm.mjs && tsc -p test/fixtures/consumer-ts/tsconfig.json --noEmit && npm pack --dry-run --json",
     "build:test": "tsc -p tsconfig.test.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

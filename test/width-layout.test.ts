@@ -20,6 +20,13 @@ test("ANSI tokens are zero width", () => {
   );
 });
 
+test("OSC hyperlink sequence is zero width", () => {
+  const link = "\u001b]8;;https://example.com\u0007docs\u001b]8;;\u0007";
+
+  strictEqual(displayWidth(link), 4);
+  strictEqual(stripAnsi(link), "docs");
+});
+
 test("width corpus covers Korean CJK emoji combining marks and tabs", () => {
   strictEqual(displayWidth("한글"), 4);
   strictEqual(displayWidth("表"), 2);
@@ -28,11 +35,23 @@ test("width corpus covers Korean CJK emoji combining marks and tabs", () => {
   strictEqual(displayWidth("a\tb", { tabSize: 2 }), 4);
 });
 
+test("ambiguous width can be overridden", () => {
+  strictEqual(displayWidth("¡", { ambiguousWidth: 1 }), 1);
+  strictEqual(displayWidth("¡", { ambiguousWidth: 2 }), 2);
+});
+
 test("truncate never cuts through ANSI sequence or grapheme", () => {
   const red = "\u001b[31m한글\u001b[0m";
 
   strictEqual(truncateToColumns(red, 3, { overflowMarker: "…" }), "\u001b[31m한…");
   strictEqual(displayWidth(truncateToColumns("👩‍💻abc", 3, { overflowMarker: "…" })), 3);
+});
+
+test("truncate preserves reset sequences that were already opened before visible text", () => {
+  const truncated = truncateToColumns("\u001b[32mabcdef\u001b[0m", 4, { overflowMarker: "…" });
+
+  strictEqual(truncated, "\u001b[32mabc…");
+  strictEqual(displayWidth(truncated), 4);
 });
 
 test("wrap respects column width without relying on terminal autowrap", () => {

@@ -32,6 +32,8 @@ test("live renderer erases previous virtual screen before redraw", async () => {
 
   const output = stream.chunks.join("");
   ok(output.includes("\u001b[2K"));
+  ok(output.includes("\u001b[?25l"));
+  ok(output.includes("\u001b[?25h"));
   strictEqual(coordinator.lease.closed, true);
 });
 
@@ -44,4 +46,24 @@ test("cleanup is idempotent", async () => {
   await coordinator.close();
 
   strictEqual(coordinator.lease.closed, true);
+});
+
+test("identical live frame is not written twice", async () => {
+  const stream = new FakeStream();
+  const coordinator = new OutputCoordinator(
+    stream,
+    {
+      render() {
+        return { kind: "live", lines: ["same"] };
+      },
+    },
+    true,
+  );
+
+  coordinator.render({ tasks: [], logs: [], createdAt: 1 });
+  const writesAfterFirstRender = stream.chunks.length;
+  coordinator.render({ tasks: [], logs: [], createdAt: 2 });
+  await coordinator.close();
+
+  strictEqual(writesAfterFirstRender, 1);
 });
