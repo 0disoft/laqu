@@ -77,3 +77,19 @@ test("scoped task marks failure and rethrows original error", async () => {
   strictEqual(stderr.text().includes("failure"), true);
   strictEqual(stderr.text().includes("boom"), true);
 });
+
+test("dirty progress updates coalesce until explicit flush", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({ stderr, env: {}, streamCapability: "pipe" });
+  const task = runtime.createTask("coalesce", { total: 10 });
+  const writesAfterStart = stderr.chunks.length;
+
+  task.advance(1);
+  task.advance(1);
+  task.advance(1);
+
+  strictEqual(stderr.chunks.length, writesAfterStart);
+  await runtime.flush();
+  strictEqual(stderr.text().includes("30%"), true);
+  await runtime.close();
+});

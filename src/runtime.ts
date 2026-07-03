@@ -96,7 +96,7 @@ class LaquRuntime implements ProgressRuntime {
 
   createTask(title: string, options: TaskOptions = {}): TaskHandle {
     const id = this.store.createTask(title, options);
-    const handle = new StoreTaskHandle(id, this.store, () => this.markDirty(true));
+    const handle = new StoreTaskHandle(id, this.store, (immediate) => this.markDirty(immediate));
     this.markDirty(true);
     return handle;
   }
@@ -153,31 +153,31 @@ class StoreTaskHandle implements TaskHandle {
   constructor(
     readonly id: string,
     private readonly store: TaskStore,
-    private readonly onChange: () => void,
+    private readonly onChange: (immediate: boolean) => void,
   ) {}
 
   setTotal(total: number): void {
     this.store.update(this.id, { progress: setTotalProgress(total) });
-    this.onChange();
+    this.onChange(false);
   }
 
   setCompleted(completed: number): void {
     this.store.update(this.id, {
       progress: setCompletedProgress(completed, this.store.getProgress(this.id)),
     });
-    this.onChange();
+    this.onChange(false);
   }
 
   advance(delta: number): void {
     this.store.update(this.id, {
       progress: advanceProgress(delta, this.store.getProgress(this.id)),
     });
-    this.onChange();
+    this.onChange(false);
   }
 
   setRatio(ratio: number): void {
     this.store.update(this.id, { progress: ratioProgress(ratio) });
-    this.onChange();
+    this.onChange(false);
   }
 
   setPercent(percent: number): void {
@@ -186,38 +186,38 @@ class StoreTaskHandle implements TaskHandle {
 
   setIndeterminate(message?: string): void {
     this.store.update(this.id, { progress: { kind: "indeterminate" }, message });
-    this.onChange();
+    this.onChange(false);
   }
 
   setMessage(message: string): void {
     this.store.update(this.id, { message });
-    this.onChange();
+    this.onChange(false);
   }
 
   setDetail(detail: string): void {
     this.store.update(this.id, { detail });
-    this.onChange();
+    this.onChange(false);
   }
 
   succeed(message?: string): void {
     this.store.update(this.id, { status: "succeeded", message });
-    this.onChange();
+    this.onChange(true);
   }
 
   fail(error?: unknown): void {
     const message = error instanceof Error ? error.message : undefined;
     this.store.update(this.id, { status: "failed", message });
-    this.onChange();
+    this.onChange(true);
   }
 
   cancel(message?: string): void {
     this.store.update(this.id, { status: "cancelled", message });
-    this.onChange();
+    this.onChange(true);
   }
 
   child(title: string, options: TaskOptions = {}): TaskHandle {
     const id = this.store.createTask(title, options, this.id);
-    this.onChange();
+    this.onChange(true);
     return new StoreTaskHandle(id, this.store, this.onChange);
   }
 }
