@@ -1,0 +1,40 @@
+import { deepStrictEqual, strictEqual } from "node:assert";
+import test from "node:test";
+
+import {
+  displayWidth,
+  stripAnsi,
+  tokenizeAnsi,
+  truncateToColumns,
+  wrapToColumns,
+} from "../src/width.js";
+
+test("ANSI tokens are zero width", () => {
+  const input = "\u001b[31mred\u001b[0m";
+
+  strictEqual(stripAnsi(input), "red");
+  strictEqual(displayWidth(input), 3);
+  deepStrictEqual(
+    tokenizeAnsi(input).map((token) => token.kind),
+    ["ansi", "text", "ansi"],
+  );
+});
+
+test("width corpus covers Korean CJK emoji combining marks and tabs", () => {
+  strictEqual(displayWidth("한글"), 4);
+  strictEqual(displayWidth("表"), 2);
+  strictEqual(displayWidth("👩‍💻"), 2);
+  strictEqual(displayWidth("e\u0301"), 1);
+  strictEqual(displayWidth("a\tb", { tabSize: 2 }), 4);
+});
+
+test("truncate never cuts through ANSI sequence or grapheme", () => {
+  const red = "\u001b[31m한글\u001b[0m";
+
+  strictEqual(truncateToColumns(red, 3, { overflowMarker: "…" }), "\u001b[31m한…");
+  strictEqual(displayWidth(truncateToColumns("👩‍💻abc", 3, { overflowMarker: "…" })), 3);
+});
+
+test("wrap respects column width without relying on terminal autowrap", () => {
+  deepStrictEqual(wrapToColumns("abcd한글", 4), ["abcd", "한글"]);
+});

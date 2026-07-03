@@ -1,0 +1,233 @@
+import { OutputCoordinator } from "./output-coordinator.js";
+import { chooseRenderer } from "./renderer.js";
+import {
+  advanceProgress,
+  ratioProgress,
+  setCompletedProgress,
+  setTotalProgress,
+  TaskStore,
+} from "./task-store.js";
+import { compileTheme } from "./theme.js";
+import type {
+  ProgressPolicy,
+  ProgressRuntime,
+  RuntimeEnvironment,
+  RuntimeOptions,
+  StreamCapability,
+  StreamTarget,
+  TaskHandle,
+  TaskOptions,
+} from "./types.js";
+
+const defaultFlushHz = 15;
+
+export function createLaqu(options: RuntimeOptions = {}): ProgressRuntime {
+  return createProgressRuntime(options);
+}
+
+export function createProgressRuntime(options: RuntimeOptions = {}): ProgressRuntime {
+  const stderr = options.statusStream ?? options.stderr ?? process.stderr;
+  const env = options.env ?? process.env;
+  const capability = options.streamCapability ?? detectCapability(stderr, env);
+  const policy = options.progressPolicy ?? "auto";
+  const theme = compileTheme({ useColor: env.NO_COLOR === undefined, ...options.theme });
+  const decision = chooseRenderer({
+    format: options.format ?? "human",
+    policy,
+    capability,
+    theme,
+    columns: stderr.columns ?? 80,
+    maxRows: options.maxRows ?? 12,
+  });
+
+  const store = new TaskStore();
+  const coordinator = new OutputCoordinator(stderr, decision.renderer, decision.live);
+  const runtime = new LaquRuntime(store, coordinator, policy);
+  return runtime;
+}
+
+class LaquRuntime implements ProgressRuntime {
+  #timer: ReturnType<typeof setTimeout> | undefined;
+  #dirty = false;
+  #closed = false;
+
+  constructor(
+    private readonly store: TaskStore,
+    private readonly coordinator: OutputCoordinator,
+    private readonly policy: ProgressPolicy,
+  ) {}
+
+  async task<T>(title: string, callback: (task: TaskHandle) => T | Promise<T>): Promise<Awaited<T>>;
+  async task<T>(
+    title: string,
+    options: TaskOptions,
+    callback: (task: TaskHandle) => T | Promise<T>,
+  ): Promise<Awaited<T>>;
+  async task<T>(
+    title: string,
+    optionsOrCallback: TaskOptions | ((task: TaskHandle) => T | Promise<T>),
+    maybeCallback?: (task: TaskHandle) => T | Promise<T>,
+  ): Promise<Awaited<T>> {
+    const options = typeof optionsOrCallback === "function" ? {} : optionsOrCallback;
+    const callback = typeof optionsOrCallback === "function" ? optionsOrCallback : maybeCallback;
+    if (callback === undefined) {
+      throw new TypeError("task callback is required");
+    }
+
+    const handle = this.createTask(title, options);
+    const onAbort = () => handle.cancel("aborted");
+    options.signal?.addEventListener("abort", onAbort, { once: true });
+    try {
+      const result = await callback(handle);
+      handle.succeed();
+      return result;
+    } catch (error) {
+      if (options.signal?.aborted === true) {
+        handle.cancel("aborted");
+      } else {
+        handle.fail(error);
+      }
+      throw error;
+    } finally {
+      options.signal?.removeEventListener("abort", onAbort);
+      await this.flush();
+    }
+  }
+
+  createTask(title: string, options: TaskOptions = {}): TaskHandle {
+    const id = this.store.createTask(title, options);
+    const handle = new StoreTaskHandle(id, this.store, () => this.markDirty(true));
+    this.markDirty(true);
+    return handle;
+  }
+
+  log(message: string): void {
+    this.store.addLog(message);
+    this.markDirty(true);
+  }
+
+  async flush(): Promise<void> {
+    if (this.#timer !== undefined) {
+      clearTimeout(this.#timer);
+      this.#timer = undefined;
+    }
+    this.#dirty = false;
+    this.coordinator.render(this.store.snapshot());
+    await this.coordinator.flush();
+  }
+
+  async close(): Promise<void> {
+    if (this.#closed) {
+      return;
+    }
+    await this.flush();
+    await this.coordinator.close();
+    this.#closed = true;
+  }
+
+  private markDirty(immediate = false): void {
+    if (this.#closed || this.policy === "silent" || this.policy === "never") {
+      return;
+    }
+    this.#dirty = true;
+    if (immediate) {
+      void this.flush();
+      return;
+    }
+    if (this.#timer !== undefined) {
+      return;
+    }
+    this.#timer = setTimeout(
+      () => {
+        this.#timer = undefined;
+        if (this.#dirty) {
+          void this.flush();
+        }
+      },
+      Math.round(1000 / defaultFlushHz),
+    );
+  }
+}
+
+class StoreTaskHandle implements TaskHandle {
+  constructor(
+    readonly id: string,
+    private readonly store: TaskStore,
+    private readonly onChange: () => void,
+  ) {}
+
+  setTotal(total: number): void {
+    this.store.update(this.id, { progress: setTotalProgress(total) });
+    this.onChange();
+  }
+
+  setCompleted(completed: number): void {
+    this.store.update(this.id, {
+      progress: setCompletedProgress(completed, this.store.getProgress(this.id)),
+    });
+    this.onChange();
+  }
+
+  advance(delta: number): void {
+    this.store.update(this.id, {
+      progress: advanceProgress(delta, this.store.getProgress(this.id)),
+    });
+    this.onChange();
+  }
+
+  setRatio(ratio: number): void {
+    this.store.update(this.id, { progress: ratioProgress(ratio) });
+    this.onChange();
+  }
+
+  setPercent(percent: number): void {
+    this.setRatio(percent / 100);
+  }
+
+  setIndeterminate(message?: string): void {
+    this.store.update(this.id, { progress: { kind: "indeterminate" }, message });
+    this.onChange();
+  }
+
+  setMessage(message: string): void {
+    this.store.update(this.id, { message });
+    this.onChange();
+  }
+
+  setDetail(detail: string): void {
+    this.store.update(this.id, { detail });
+    this.onChange();
+  }
+
+  succeed(message?: string): void {
+    this.store.update(this.id, { status: "succeeded", message });
+    this.onChange();
+  }
+
+  fail(error?: unknown): void {
+    const message = error instanceof Error ? error.message : undefined;
+    this.store.update(this.id, { status: "failed", message });
+    this.onChange();
+  }
+
+  cancel(message?: string): void {
+    this.store.update(this.id, { status: "cancelled", message });
+    this.onChange();
+  }
+
+  child(title: string, options: TaskOptions = {}): TaskHandle {
+    const id = this.store.createTask(title, options, this.id);
+    this.onChange();
+    return new StoreTaskHandle(id, this.store, this.onChange);
+  }
+}
+
+function detectCapability(stream: StreamTarget, env: RuntimeEnvironment): StreamCapability {
+  if (env.CI !== undefined) {
+    return "ci";
+  }
+  if (env.TERM === "dumb") {
+    return "dumb";
+  }
+  return stream.isTTY === true ? "tty" : "pipe";
+}
