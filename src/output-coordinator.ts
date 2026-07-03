@@ -62,10 +62,13 @@ export class OutputCoordinator {
       return;
     }
     await this.flush();
-    if (this.live && this.lease.renderedLineCount > 0) {
-      this.#writeRaw(`${this.#showCursor()}\u001b[0m\n`);
-    } else {
-      this.#writeRaw(`${this.#showCursor()}\u001b[0m`);
+    if (this.live) {
+      const cursor = this.#showCursor();
+      if (this.lease.renderedLineCount > 0) {
+        this.#writeRaw(`${cursor}\u001b[0m\n`);
+      } else if (cursor.length > 0) {
+        this.#writeRaw(`${cursor}\u001b[0m`);
+      }
     }
     this.lease.closed = true;
     this.lease.renderedLineCount = 0;

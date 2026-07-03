@@ -36,7 +36,13 @@ test("progress defaults to stderr and keeps stdout clean", async () => {
 test("json progress events still use status stream by default", async () => {
   const stdout = new FakeStream();
   const stderr = new FakeStream();
-  const runtime = createLaqu({ stdout, stderr, format: "json", env: {}, streamCapability: "tty" });
+  const runtime = createLaqu({
+    stdout,
+    stderr,
+    format: "ndjson",
+    env: {},
+    streamCapability: "tty",
+  });
 
   const task = runtime.createTask("json-task", { ratio: 0.5 });
   task.succeed();
@@ -46,6 +52,16 @@ test("json progress events still use status stream by default", async () => {
   strictEqual(stderr.text().includes('"schema":"laqu.event"'), true);
   strictEqual(stderr.text().includes('"version":1'), true);
   strictEqual(stderr.text().includes('"type":"task"'), true);
+  const events = stderr
+    .text()
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as { readonly schema?: unknown });
+  strictEqual(
+    events.every((event) => event.schema === "laqu.event"),
+    true,
+  );
 });
 
 test("scoped task succeeds and closes cleanly", async () => {
