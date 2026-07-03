@@ -1,4 +1,5 @@
 import type { ThemeInput, ThemeTokens } from "./types.js";
+import { sanitizeText } from "./width.js";
 
 export interface RenderableSegment {
   readonly text: string;
@@ -44,10 +45,11 @@ export function compileTheme(input: ThemeInput = {}): CompiledTheme {
       if (segment.rawAnsi === true) {
         return segment.text;
       }
+      const safeText = sanitizeText(segment.text);
       if (!useColor || segment.style === undefined) {
-        return segment.text;
+        return safeText;
       }
-      return `${styles[segment.style]}${segment.text}${styles.reset}`;
+      return `${styles[segment.style]}${safeText}${styles.reset}`;
     },
   };
 }

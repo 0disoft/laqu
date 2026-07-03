@@ -20,6 +20,11 @@ import type {
 } from "./types.js";
 
 const defaultFlushHz = 15;
+const liveStreamLeases = new WeakSet<StreamTarget>();
+
+interface LiveStreamLease {
+  release(): void;
+}
 
 export function createLaqu(options: RuntimeOptions = {}): ProgressRuntime {
   return createProgressRuntime(options);
@@ -30,19 +35,33 @@ export function createProgressRuntime(options: RuntimeOptions = {}): ProgressRun
   const env = options.env ?? process.env;
   const capability = options.streamCapability ?? detectCapability(stderr, env);
   const policy = options.progressPolicy ?? "auto";
-  const theme = compileTheme({ useColor: env.NO_COLOR === undefined, ...options.theme });
-  const decision = chooseRenderer({
+  const theme = compileTheme({ useColor: defaultUseColor(capability, env), ...options.theme });
+  const rendererOptions = {
     format: options.format ?? "human",
     policy,
     capability,
     theme,
     columns: stderr.columns ?? 80,
     maxRows: options.maxRows ?? 12,
-  });
+  };
+  const initialDecision = chooseRenderer(rendererOptions);
+  const liveStreamLease = initialDecision.live ? acquireLiveStreamLease(stderr) : undefined;
+  const decision =
+    initialDecision.live && liveStreamLease === undefined
+      ? chooseRenderer({ ...rendererOptions, policy: "plain" })
+      : initialDecision;
 
-  const store = new TaskStore();
-  const coordinator = new OutputCoordinator(stderr, decision.renderer, decision.live);
-  const runtime = new LaquRuntime(store, coordinator, policy);
+  const store = new TaskStore({
+    maxLogs: options.retention?.maxLogs,
+    maxTerminalTasks: options.retention?.maxTerminalTasks,
+  });
+  const coordinator = new OutputCoordinator(
+    stderr,
+    decision.renderer,
+    decision.live,
+    decision.jsonSerialization,
+  );
+  const runtime = new LaquRuntime(store, coordinator, policy, liveStreamLease);
   if (options.manageProcessLifecycle === true) {
     runtime.manageProcessLifecycle();
   }
@@ -54,6 +73,7 @@ class LaquRuntime implements ProgressRuntime {
   #flushPromise: Promise<void> | undefined;
   #closePromise: Promise<void> | undefined;
   #dirty = false;
+  #closing = false;
   #closed = false;
   #processLifecycle: ProcessLifecycleLease | undefined;
 
@@ -61,6 +81,7 @@ class LaquRuntime implements ProgressRuntime {
     private readonly store: TaskStore,
     private readonly coordinator: OutputCoordinator,
     private readonly policy: ProgressPolicy,
+    private readonly liveStreamLease: LiveStreamLease | undefined,
   ) {}
 
   async task<T>(title: string, callback: (task: TaskHandle) => T | Promise<T>): Promise<Awaited<T>>;
@@ -91,10 +112,14 @@ class LaquRuntime implements ProgressRuntime {
       handle.succeed();
       return result;
     } catch (error) {
-      if (options.signal?.aborted === true) {
-        handle.cancel("aborted");
-      } else {
-        handle.fail(error);
+      if (this.#acceptsMutations()) {
+        if (options.signal?.aborted === true) {
+          this.store.forceTerminalUpdate(handle.id, { status: "cancelled", message: "aborted" });
+        } else {
+          const message = error instanceof Error ? error.message : undefined;
+          this.store.forceTerminalUpdate(handle.id, { status: "failed", message });
+        }
+        this.markDirty(true);
       }
       throw error;
     } finally {
@@ -104,13 +129,20 @@ class LaquRuntime implements ProgressRuntime {
   }
 
   createTask(title: string, options: TaskOptions = {}): TaskHandle {
+    this.#assertAcceptsMutations();
     const id = this.store.createTask(title, options);
-    const handle = new StoreTaskHandle(id, this.store, (immediate) => this.markDirty(immediate));
+    const handle = new StoreTaskHandle(
+      id,
+      this.store,
+      (immediate) => this.markDirty(immediate),
+      () => this.#assertAcceptsMutations(),
+    );
     this.markDirty(true);
     return handle;
   }
 
   log(message: string): void {
+    this.#assertAcceptsMutations();
     this.store.addLog(message);
     this.markDirty(true);
   }
@@ -149,15 +181,21 @@ class LaquRuntime implements ProgressRuntime {
     if (this.#closed) {
       return;
     }
+    this.#closing = true;
     this.#processLifecycle?.dispose();
     this.#processLifecycle = undefined;
-    await this.flush();
-    await this.coordinator.close();
-    this.#closed = true;
+    try {
+      await this.flush();
+      this.#closed = true;
+      this.coordinator.finalize(this.store.snapshot());
+      await this.coordinator.close();
+    } finally {
+      this.liveStreamLease?.release();
+    }
   }
 
   private markDirty(immediate = false): void {
-    if (this.#closed || this.policy === "silent" || this.policy === "never") {
+    if (this.#closing || this.#closed || this.policy === "silent" || this.policy === "never") {
       return;
     }
     this.#dirty = true;
@@ -177,6 +215,16 @@ class LaquRuntime implements ProgressRuntime {
       },
       Math.round(1000 / defaultFlushHz),
     );
+  }
+
+  #acceptsMutations(): boolean {
+    return !this.#closing && !this.#closed;
+  }
+
+  #assertAcceptsMutations(): void {
+    if (!this.#acceptsMutations()) {
+      throw new Error("Laqu runtime is closing");
+    }
   }
 }
 
@@ -226,14 +274,17 @@ class StoreTaskHandle implements TaskHandle {
     readonly id: string,
     private readonly store: TaskStore,
     private readonly onChange: (immediate: boolean) => void,
+    private readonly assertWritable: () => void,
   ) {}
 
   setTotal(total: number): void {
+    this.assertWritable();
     this.store.update(this.id, { progress: setTotalProgress(total) });
     this.onChange(false);
   }
 
   setCompleted(completed: number): void {
+    this.assertWritable();
     this.store.update(this.id, {
       progress: setCompletedProgress(completed, this.store.getProgress(this.id)),
     });
@@ -241,6 +292,7 @@ class StoreTaskHandle implements TaskHandle {
   }
 
   advance(delta: number): void {
+    this.assertWritable();
     this.store.update(this.id, {
       progress: advanceProgress(delta, this.store.getProgress(this.id)),
     });
@@ -248,6 +300,7 @@ class StoreTaskHandle implements TaskHandle {
   }
 
   setRatio(ratio: number): void {
+    this.assertWritable();
     this.store.update(this.id, { progress: ratioProgress(ratio) });
     this.onChange(false);
   }
@@ -257,40 +310,47 @@ class StoreTaskHandle implements TaskHandle {
   }
 
   setIndeterminate(message?: string): void {
+    this.assertWritable();
     this.store.update(this.id, { progress: { kind: "indeterminate" }, message });
     this.onChange(false);
   }
 
   setMessage(message: string): void {
+    this.assertWritable();
     this.store.update(this.id, { message });
     this.onChange(false);
   }
 
   setDetail(detail: string): void {
+    this.assertWritable();
     this.store.update(this.id, { detail });
     this.onChange(false);
   }
 
   succeed(message?: string): void {
+    this.assertWritable();
     this.store.update(this.id, { status: "succeeded", message });
     this.onChange(true);
   }
 
   fail(error?: unknown): void {
+    this.assertWritable();
     const message = error instanceof Error ? error.message : undefined;
     this.store.update(this.id, { status: "failed", message });
     this.onChange(true);
   }
 
   cancel(message?: string): void {
+    this.assertWritable();
     this.store.update(this.id, { status: "cancelled", message });
     this.onChange(true);
   }
 
   child(title: string, options: TaskOptions = {}): TaskHandle {
+    this.assertWritable();
     const id = this.store.createTask(title, options, this.id);
     this.onChange(true);
-    return new StoreTaskHandle(id, this.store, this.onChange);
+    return new StoreTaskHandle(id, this.store, this.onChange, this.assertWritable);
   }
 }
 
@@ -302,4 +362,31 @@ function detectCapability(stream: StreamTarget, env: RuntimeEnvironment): Stream
     return "dumb";
   }
   return stream.isTTY === true ? "tty" : "pipe";
+}
+
+function defaultUseColor(capability: StreamCapability, env: RuntimeEnvironment): boolean {
+  if (env.NO_COLOR !== undefined) {
+    return false;
+  }
+  if (env.FORCE_COLOR !== undefined && env.FORCE_COLOR !== "0") {
+    return true;
+  }
+  return capability === "tty";
+}
+
+function acquireLiveStreamLease(stream: StreamTarget): LiveStreamLease | undefined {
+  if (liveStreamLeases.has(stream)) {
+    return undefined;
+  }
+  liveStreamLeases.add(stream);
+  let released = false;
+  return {
+    release() {
+      if (released) {
+        return;
+      }
+      released = true;
+      liveStreamLeases.delete(stream);
+    },
+  };
 }

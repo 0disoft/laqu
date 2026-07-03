@@ -1,4 +1,5 @@
-import { deepStrictEqual, rejects, strictEqual } from "node:assert";
+import { deepStrictEqual, rejects, strictEqual, throws } from "node:assert";
+import { EventEmitter } from "node:events";
 import test from "node:test";
 
 import { createLaqu } from "../src/index.js";
@@ -11,6 +12,26 @@ class FakeStream implements StreamTarget {
 
   write(chunk: string): boolean {
     this.chunks.push(chunk);
+    return true;
+  }
+
+  text(): string {
+    return this.chunks.join("");
+  }
+}
+
+class DeferredDrainStream extends EventEmitter implements StreamTarget {
+  readonly chunks: string[] = [];
+  isTTY = false;
+  columns = 80;
+  failNext = true;
+
+  write(chunk: string): boolean {
+    this.chunks.push(chunk);
+    if (this.failNext) {
+      this.failNext = false;
+      return false;
+    }
     return true;
   }
 
@@ -64,6 +85,62 @@ test("json progress events still use status stream by default", async () => {
   );
 });
 
+test("json format emits a parseable event array", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({
+    stderr,
+    env: {},
+    format: "json",
+    streamCapability: "pipe",
+  });
+
+  const task = runtime.createTask("json-array", { ratio: 0.5 });
+  task.succeed();
+  runtime.log("late log");
+  await runtime.close();
+
+  const events = JSON.parse(stderr.text()) as readonly {
+    readonly type?: string;
+    readonly schema?: string;
+  }[];
+  strictEqual(Array.isArray(events), true);
+  strictEqual(
+    events.every((event) => event.schema === "laqu.event"),
+    true,
+  );
+  strictEqual(events.at(-1)?.type, "summary");
+  strictEqual(events.filter((event) => event.type === "summary").length, 1);
+  strictEqual(
+    events.some((event) => event.type === "log"),
+    true,
+  );
+});
+
+test("ndjson format keeps newline-delimited event output", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({
+    stderr,
+    env: {},
+    format: "ndjson",
+    streamCapability: "pipe",
+  });
+
+  const task = runtime.createTask("ndjson-stream", { ratio: 0.5 });
+  task.succeed();
+  await runtime.close();
+
+  const lines = stderr.text().trim().split("\n").filter(Boolean);
+  strictEqual(lines.length > 1, true);
+  const events = lines.map(
+    (line) => JSON.parse(line) as { readonly type?: string; readonly schema?: string },
+  );
+  strictEqual(
+    events.every((event) => event.schema === "laqu.event"),
+    true,
+  );
+  strictEqual(events.at(-1)?.type, "summary");
+});
+
 test("human progress renders themed percentage bar", async () => {
   const stderr = new FakeStream();
   const runtime = createLaqu({
@@ -115,6 +192,43 @@ test("scoped task marks failure and rethrows original error", async () => {
   strictEqual(stderr.text().includes("boom"), true);
 });
 
+test("scoped task failure overrides an earlier manual success", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({
+    stderr,
+    env: {},
+    format: "ndjson",
+    streamCapability: "pipe",
+  });
+  const error = new Error("late failure");
+
+  await rejects(
+    runtime.task("manual success then throw", (task) => {
+      task.succeed("done");
+      throw error;
+    }),
+    error,
+  );
+  await runtime.close();
+
+  const taskEvents = stderr
+    .text()
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map(
+      (line) =>
+        JSON.parse(line) as {
+          readonly type?: string;
+          readonly task?: { readonly status?: string; readonly message?: string };
+        },
+    )
+    .filter((event) => event.type === "task");
+  const finalTaskEvent = taskEvents.at(-1);
+  strictEqual(finalTaskEvent?.task?.status, "failed");
+  strictEqual(finalTaskEvent?.task?.message, "late failure");
+});
+
 test("aborted scoped task is not overwritten by callback success", async () => {
   const stderr = new FakeStream();
   const runtime = createLaqu({
@@ -147,6 +261,142 @@ test("aborted scoped task is not overwritten by callback success", async () => {
   const finalTaskEvent = taskEvents.at(-1);
   strictEqual(result, 7);
   strictEqual(finalTaskEvent?.task?.status, "cancelled");
+});
+
+test("pipe plain output disables ANSI color by default", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({
+    stderr,
+    env: {},
+    streamCapability: "pipe",
+    progressPolicy: "plain",
+  });
+
+  const task = runtime.createTask("plain", { ratio: 1 });
+  task.succeed();
+  await runtime.close();
+
+  strictEqual(stderr.text().includes("\u001b["), false);
+});
+
+test("runtime log retention can drop log output", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({
+    stderr,
+    env: {},
+    streamCapability: "pipe",
+    retention: { maxLogs: 0 },
+  });
+
+  runtime.log("dropped");
+  await runtime.close();
+
+  strictEqual(stderr.text(), "");
+});
+
+test("runtime terminal task retention keeps summary counts for pruned tasks", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({
+    stderr,
+    env: {},
+    format: "json",
+    streamCapability: "pipe",
+    retention: { maxTerminalTasks: 0 },
+  });
+
+  for (let index = 1; index <= 3; index += 1) {
+    const task = runtime.createTask(`task-${index}`);
+    task.succeed();
+    await runtime.flush();
+  }
+  await runtime.close();
+
+  const events = JSON.parse(stderr.text()) as readonly {
+    readonly type?: string;
+    readonly tasks?: {
+      readonly total?: number;
+      readonly running?: number;
+      readonly succeeded?: number;
+      readonly failed?: number;
+    };
+  }[];
+  const summary = events.find((event) => event.type === "summary");
+
+  strictEqual(summary?.tasks?.total, 3);
+  strictEqual(summary?.tasks?.running, 0);
+  strictEqual(summary?.tasks?.succeeded, 3);
+  strictEqual(summary?.tasks?.failed, 0);
+});
+
+test("runtime rejects new mutations while close is in progress", async () => {
+  const stderr = new DeferredDrainStream();
+  const runtime = createLaqu({ stderr, env: {}, streamCapability: "pipe" });
+  const task = runtime.createTask("closing", { total: 2 });
+
+  const closing = runtime.close();
+
+  throws(() => runtime.createTask("late"), { message: "Laqu runtime is closing" });
+  throws(() => runtime.log("late log"), { message: "Laqu runtime is closing" });
+  throws(() => task.advance(1), { message: "Laqu runtime is closing" });
+
+  stderr.emit("drain");
+  await closing;
+
+  strictEqual(stderr.text().includes("closing"), true);
+  strictEqual(stderr.text().includes("late"), false);
+});
+
+test("runtime rejects mutations after close", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({ stderr, env: {}, streamCapability: "pipe" });
+  const task = runtime.createTask("closed", { total: 1 });
+  task.succeed();
+  await runtime.close();
+
+  throws(() => runtime.createTask("late"), { message: "Laqu runtime is closing" });
+  throws(() => runtime.log("late log"), { message: "Laqu runtime is closing" });
+  throws(() => task.setMessage("late"), { message: "Laqu runtime is closing" });
+});
+
+test("concurrent live runtimes on the same stream fall back to plain rendering", async () => {
+  const stderr = new FakeStream();
+  stderr.isTTY = true;
+  const primary = createLaqu({ stderr, env: {}, streamCapability: "tty" });
+
+  primary.createTask("primary", { ratio: 0.25 });
+  await primary.flush();
+  const chunksAfterPrimary = stderr.chunks.length;
+
+  const secondary = createLaqu({ stderr, env: {}, streamCapability: "tty" });
+  secondary.createTask("secondary", { ratio: 0.5 });
+  await secondary.flush();
+
+  const secondaryOutput = stderr.chunks.slice(chunksAfterPrimary).join("");
+  strictEqual(secondaryOutput.includes("secondary"), true);
+  strictEqual(secondaryOutput.includes("\u001b[?25l"), false);
+  strictEqual(secondaryOutput.includes("\u001b[2K"), false);
+
+  await secondary.close();
+  await primary.close();
+
+  strictEqual(countOccurrences(stderr.text(), "\u001b[?25l"), 1);
+  strictEqual(countOccurrences(stderr.text(), "\u001b[?25h"), 1);
+});
+
+test("live stream ownership is released after close", async () => {
+  const stderr = new FakeStream();
+  stderr.isTTY = true;
+
+  const first = createLaqu({ stderr, env: {}, streamCapability: "tty" });
+  first.createTask("first", { ratio: 0.25 });
+  await first.close();
+
+  const second = createLaqu({ stderr, env: {}, streamCapability: "tty" });
+  second.createTask("second", { ratio: 0.5 });
+  await second.close();
+
+  strictEqual(countOccurrences(stderr.text(), "\u001b[?25l"), 2);
+  strictEqual(countOccurrences(stderr.text(), "\u001b[?25h"), 2);
 });
 
 test("process lifecycle handlers are opt-in and disposed on close", async () => {
@@ -207,6 +457,22 @@ test("burst progress updates do not emit one frame per mutation", async () => {
   strictEqual(stderr.text().includes("100%"), true);
   await runtime.close();
 });
+
+function countOccurrences(text: string, needle: string): number {
+  if (needle.length === 0) {
+    return 0;
+  }
+  let count = 0;
+  let offset = 0;
+  while (true) {
+    const index = text.indexOf(needle, offset);
+    if (index === -1) {
+      return count;
+    }
+    count += 1;
+    offset = index + needle.length;
+  }
+}
 
 function processLifecycleListenerCounts(): {
   readonly SIGINT: number;

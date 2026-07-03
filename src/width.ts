@@ -13,6 +13,8 @@ const ansiPattern = new RegExp(
   String.raw`\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007]*(?:\u0007|\u001b\\)|[@-Z\\-_])`,
   "g",
 );
+const unsafeControlPattern = new RegExp(String.raw`[\u0000-\u0008\u000a-\u001f\u007f-\u009f]`, "g");
+const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 export function tokenizeAnsi(input: string): AnsiToken[] {
   const tokens: AnsiToken[] = [];
@@ -41,8 +43,13 @@ export function stripAnsi(input: string): string {
     .join("");
 }
 
+export function sanitizeText(input: string): string {
+  return stripAnsi(input).replaceAll(unsafeControlPattern, (control) =>
+    control === "\n" || control === "\r" ? " " : "\uFFFD",
+  );
+}
+
 export function graphemes(input: string): string[] {
-  const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
   return Array.from(segmenter.segment(input), (segment) => segment.segment);
 }
 

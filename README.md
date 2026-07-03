@@ -51,6 +51,8 @@ await progress.close();
 
 The API avoids ambiguous calls such as `update(42)`. Use `setCompleted(42)` for absolute progress and `advance(42)` for a delta.
 
+After `progress.close()` starts, the runtime stops accepting new tasks, logs, and task handle updates. Create a new runtime for later progress output.
+
 ## Logs
 
 ```ts
@@ -100,18 +102,23 @@ By default:
 - stdout is reserved for user data such as JSON, NDJSON, CSV, file lists, or binary output.
 - stderr is used for progress, status, logs, and machine-readable progress events.
 - human live rendering is enabled only when the status stream is a TTY and the environment is not CI.
+- only one runtime owns live rendering for a stream at a time; concurrent runtimes on that same stream fall back to plain append rendering until the live owner closes.
 - CI, pipe, dumb terminal, and non-TTY output fall back to plain append rendering unless a different policy is requested.
 - JSON/NDJSON progress events do not go to stdout unless the caller explicitly passes a separate status stream that points there.
 
 ```ts
 const progress = createLaqu({
-  format: "json",
+  format: "ndjson",
   progressPolicy: "jsonl",
+  retention: { maxLogs: 1000, maxTerminalTasks: 1000 },
   stderr: process.stderr,
 });
 ```
 
-Machine-readable progress events use a versioned schema:
+Machine-readable progress events use a versioned schema. `format: "json"` writes one parseable JSON array when the runtime closes; `format: "ndjson"` and `progressPolicy: "jsonl"` write newline-delimited event objects as work progresses.
+
+The runtime retains the newest 1000 log records and 1000 terminal task records by default so long-running commands do not keep unbounded output buffers. Set `retention.maxLogs` or `retention.maxTerminalTasks` to smaller non-negative integers when only the latest output window should be rendered or emitted. Terminal task pruning affects retained task rows and task events only after the terminal task has been snapshotted for rendering; summary events keep lifecycle counts for all tasks created by the runtime.
+Task event fields such as `parentId`, `message`, and `detail` are omitted when they are absent.
 
 ```json
 {
@@ -192,11 +199,13 @@ bun run example:basic
 
 ## Release
 
-GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v1.0.3` for version `1.0.3`.
+GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v1.0.4` for version `1.0.4`.
 
 ```sh
-git tag -a v1.0.3 -m "v1.0.3"
-git push origin main v1.0.3
+git tag -a v1.0.4 -m "v1.0.4"
+git push origin main v1.0.4
 ```
 
-The npm package must define a Trusted Publisher connection for GitHub Actions with organization/user `0disoft`, repository `laqu`, workflow filename `release.yml`, no environment name, and `npm publish` allowed. On a matching tag push, the workflow installs dependencies, checks the package, runs a dry pack verification, publishes `@0disoft/laqu` to npm through OIDC, and creates a GitHub Release with generated notes.
+The npm package must define a Trusted Publisher connection for GitHub Actions with organization/user `0disoft`, repository `laqu`, workflow filename `release.yml`, environment name `npm`, and `npm publish` allowed. The GitHub repository must also define an `npm` environment with required reviewers and a deployment tag rule that allows only `v*.*.*` tags.
+
+On a matching tag push, the workflow first verifies the tag, package metadata, tests, build, and dry pack output with read-only repository permissions. The publish job then waits on the `npm` environment gate, repeats package verification on the tagged commit, packs the release tarball, uploads that exact tarball as a retained workflow artifact, publishes the same tarball to npm with provenance through OIDC, and creates a GitHub Release with generated notes.

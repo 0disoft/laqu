@@ -1,4 +1,9 @@
-import type { AggregateProgress, TaskSnapshot, TaskStatus } from "./task-store.js";
+import type {
+  AggregateProgress,
+  TaskSnapshot,
+  TaskSummaryCounts,
+  TaskStatus,
+} from "./task-store.js";
 
 export const LAQU_EVENT_SCHEMA = "laqu.event";
 export const LAQU_EVENT_SCHEMA_VERSION = 1;
@@ -17,11 +22,11 @@ export interface LaquTaskEvent extends Omit<LaquEventBase, "type"> {
   readonly task: {
     readonly id: string;
     readonly title: string;
-    readonly parentId: string | undefined;
+    readonly parentId?: string;
     readonly status: TaskStatus;
     readonly progress: LaquEventProgress;
-    readonly message: string | undefined;
-    readonly detail: string | undefined;
+    readonly message?: string;
+    readonly detail?: string;
     readonly depth: number;
   };
 }
@@ -57,12 +62,12 @@ export function taskEvent(task: TaskSnapshot): LaquTaskEvent {
     task: {
       id: task.id,
       title: task.title,
-      parentId: task.parentId,
       status: task.status,
       progress: eventProgress(task.aggregate),
-      message: task.message,
-      detail: task.detail,
       depth: task.depth,
+      ...(task.parentId === undefined ? {} : { parentId: task.parentId }),
+      ...(task.message === undefined ? {} : { message: task.message }),
+      ...(task.detail === undefined ? {} : { detail: task.detail }),
     },
   };
 }
@@ -77,20 +82,19 @@ export function logEvent(message: string, createdAt: number): LaquLogEvent {
   };
 }
 
-export function summaryEvent(tasks: readonly TaskSnapshot[], createdAt: number): LaquSummaryEvent {
-  const flatTasks = flattenTasks(tasks);
+export function summaryEvent(counts: TaskSummaryCounts, createdAt: number): LaquSummaryEvent {
   return {
     schema: LAQU_EVENT_SCHEMA,
     version: LAQU_EVENT_SCHEMA_VERSION,
     type: "summary",
     createdAt,
     tasks: {
-      total: flatTasks.length,
-      running: countByStatus(flatTasks, "running"),
-      succeeded: countByStatus(flatTasks, "succeeded"),
-      failed: countByStatus(flatTasks, "failed"),
-      cancelled: countByStatus(flatTasks, "cancelled"),
-      skipped: countByStatus(flatTasks, "skipped"),
+      total: counts.total,
+      running: counts.running,
+      succeeded: counts.succeeded,
+      failed: counts.failed,
+      cancelled: counts.cancelled,
+      skipped: counts.skipped,
     },
   };
 }
@@ -104,17 +108,4 @@ function eventProgress(progress: AggregateProgress): LaquEventProgress {
     case "ratio":
       return { kind: "ratio", ratio: progress.ratio, overrun: progress.overrun };
   }
-}
-
-function flattenTasks(tasks: readonly TaskSnapshot[]): TaskSnapshot[] {
-  const flatTasks: TaskSnapshot[] = [];
-  for (const task of tasks) {
-    flatTasks.push(task);
-    flatTasks.push(...flattenTasks(task.children));
-  }
-  return flatTasks;
-}
-
-function countByStatus(tasks: readonly TaskSnapshot[], status: TaskStatus): number {
-  return tasks.filter((task) => task.status === status).length;
 }

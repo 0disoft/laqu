@@ -18,7 +18,7 @@ class FakeStream implements StreamTarget {
 
 const renderer: Renderer = {
   render(snapshot: RuntimeSnapshot) {
-    return { kind: "live", lines: [`frame-${snapshot.createdAt}`] };
+    return { kind: "live", scrollbackLines: [], lines: [`frame-${snapshot.createdAt}`] };
   },
 };
 
@@ -26,8 +26,8 @@ test("live renderer erases previous virtual screen before redraw", async () => {
   const stream = new FakeStream();
   const coordinator = new OutputCoordinator(stream, renderer, true);
 
-  coordinator.render({ tasks: [], logs: [], createdAt: 1 });
-  coordinator.render({ tasks: [], logs: [], createdAt: 2 });
+  coordinator.render(snapshot(1));
+  coordinator.render(snapshot(2));
   await coordinator.close();
 
   const output = stream.chunks.join("");
@@ -41,7 +41,7 @@ test("cleanup is idempotent", async () => {
   const stream = new FakeStream();
   const coordinator = new OutputCoordinator(stream, renderer, true);
 
-  coordinator.render({ tasks: [], logs: [], createdAt: 1 });
+  coordinator.render(snapshot(1));
   await coordinator.close();
   await coordinator.close();
 
@@ -54,16 +54,32 @@ test("identical live frame is not written twice", async () => {
     stream,
     {
       render() {
-        return { kind: "live", lines: ["same"] };
+        return { kind: "live", scrollbackLines: [], lines: ["same"] };
       },
     },
     true,
   );
 
-  coordinator.render({ tasks: [], logs: [], createdAt: 1 });
+  coordinator.render(snapshot(1));
   const writesAfterFirstRender = stream.chunks.length;
-  coordinator.render({ tasks: [], logs: [], createdAt: 2 });
+  coordinator.render(snapshot(2));
   await coordinator.close();
 
   strictEqual(writesAfterFirstRender, 1);
 });
+
+function snapshot(createdAt: number): RuntimeSnapshot {
+  return {
+    tasks: [],
+    logs: [],
+    summary: {
+      total: 0,
+      running: 0,
+      succeeded: 0,
+      failed: 0,
+      cancelled: 0,
+      skipped: 0,
+    },
+    createdAt,
+  };
+}

@@ -1,4 +1,4 @@
-import { deepStrictEqual, ok, strictEqual } from "node:assert";
+import { deepStrictEqual, ok, strictEqual, throws } from "node:assert";
 import test from "node:test";
 
 import {
@@ -7,6 +7,7 @@ import {
   setCompletedProgress,
   setTotalProgress,
   TaskStore,
+  type TaskSnapshot,
 } from "../src/task-store.js";
 
 test("progress math clamps overrun without throwing", () => {
@@ -95,4 +96,160 @@ test("terminal task status cannot be overwritten", () => {
   strictEqual(task?.message, "aborted");
   strictEqual(task?.progress.kind, "none");
   strictEqual(task?.detail, undefined);
+});
+
+test("task creation rejects non-finite completed values", () => {
+  const store = new TaskStore();
+
+  throws(() => store.createTask("bad completed", { completed: Number.NaN }), {
+    name: "TypeError",
+    message: "completed must be a finite non-negative number",
+  });
+});
+
+test("task creation rejects invalid aggregate weights", () => {
+  const store = new TaskStore();
+
+  throws(() => store.createTask("bad weight", { weight: Number.POSITIVE_INFINITY }), {
+    name: "TypeError",
+    message: "weight must be a finite non-negative number",
+  });
+  throws(() => store.createTask("negative weight", { weight: -1 }), {
+    name: "TypeError",
+    message: "weight must be a finite non-negative number",
+  });
+});
+
+test("log retention keeps only the newest records", () => {
+  const store = new TaskStore({ maxLogs: 2 });
+
+  store.addLog("one");
+  store.addLog("two");
+  store.addLog("three");
+
+  const logs = store.snapshot().logs;
+  deepStrictEqual(
+    logs.map((log) => log.message),
+    ["two", "three"],
+  );
+  deepStrictEqual(
+    logs.map((log) => log.sequence),
+    [2, 3],
+  );
+});
+
+test("zero log retention drops log records", () => {
+  const store = new TaskStore({ maxLogs: 0 });
+
+  store.addLog("hidden");
+
+  strictEqual(store.snapshot().logs.length, 0);
+});
+
+test("task creation rejects invalid log retention limits", () => {
+  throws(() => new TaskStore({ maxLogs: -1 }), {
+    name: "TypeError",
+    message: "maxLogs must be a safe non-negative integer",
+  });
+  throws(() => new TaskStore({ maxLogs: 1.5 }), {
+    name: "TypeError",
+    message: "maxLogs must be a safe non-negative integer",
+  });
+});
+
+test("terminal task retention prunes old terminal leaf tasks after they are snapshotted", () => {
+  const store = new TaskStore({ maxTerminalTasks: 2 });
+
+  for (let index = 1; index <= 4; index += 1) {
+    const id = store.createTask(`done-${index}`);
+    store.update(id, { status: "succeeded" });
+    store.snapshot();
+  }
+
+  const retained = store.snapshot();
+
+  deepStrictEqual(
+    retained.tasks.map((task) => task.title),
+    ["done-3", "done-4"],
+  );
+  deepStrictEqual(retained.summary, {
+    total: 4,
+    running: 0,
+    succeeded: 4,
+    failed: 0,
+    cancelled: 0,
+    skipped: 0,
+  });
+});
+
+test("zero terminal task retention prunes after the retained task is resnapshotted", () => {
+  const store = new TaskStore({ maxTerminalTasks: 0 });
+  const id = store.createTask("short-lived");
+  store.update(id, { status: "succeeded" });
+
+  const first = store.snapshot();
+  const second = store.snapshot();
+  const third = store.snapshot();
+
+  strictEqual(first.tasks.length, 1);
+  strictEqual(second.tasks.length, 1);
+  strictEqual(third.tasks.length, 0);
+  deepStrictEqual(third.summary, {
+    total: 1,
+    running: 0,
+    succeeded: 1,
+    failed: 0,
+    cancelled: 0,
+    skipped: 0,
+  });
+  store.update(id, { status: "failed" });
+});
+
+test("task creation rejects terminal parents", () => {
+  const store = new TaskStore();
+  const parent = store.createTask("parent");
+  store.update(parent, { status: "succeeded" });
+
+  throws(() => store.createTask("late child", {}, parent), {
+    message: `Cannot create child task under terminal task: ${parent}`,
+  });
+  deepStrictEqual(store.snapshot().summary, {
+    total: 1,
+    running: 0,
+    succeeded: 1,
+    failed: 0,
+    cancelled: 0,
+    skipped: 0,
+  });
+});
+
+test("task creation rejects invalid terminal task retention limits", () => {
+  throws(() => new TaskStore({ maxTerminalTasks: -1 }), {
+    name: "TypeError",
+    message: "maxTerminalTasks must be a safe non-negative integer",
+  });
+  throws(() => new TaskStore({ maxTerminalTasks: 1.5 }), {
+    name: "TypeError",
+    message: "maxTerminalTasks must be a safe non-negative integer",
+  });
+});
+
+test("deep task snapshots are built without recursive traversal", () => {
+  const store = new TaskStore();
+  let parent = store.createTask("root");
+
+  for (let depth = 1; depth <= 5000; depth += 1) {
+    parent = store.createTask(`child-${depth}`, { ratio: 1 }, parent);
+  }
+
+  const root = store.snapshot().tasks[0];
+  strictEqual(root?.aggregate.kind, "ratio");
+  let current: TaskSnapshot | undefined = root;
+  let depth = 0;
+  while (current !== undefined) {
+    depth += 1;
+    current = current.children[0];
+  }
+
+  strictEqual(depth, 5001);
 });

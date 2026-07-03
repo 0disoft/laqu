@@ -1,23 +1,31 @@
 import { logEvent, summaryEvent, taskEvent, type LaquEvent } from "./events.js";
 import { renderSegments, text, type CompiledTheme } from "./theme.js";
 import type { OutputFormat, ProgressPolicy, StreamCapability } from "./types.js";
-import { truncateToColumns } from "./width.js";
-import type { RuntimeSnapshot, TaskSnapshot, TaskStatus } from "./task-store.js";
+import { sanitizeText, truncateToColumns } from "./width.js";
+import type { LogRecord, RuntimeSnapshot, TaskSnapshot, TaskStatus } from "./task-store.js";
 
 export type Frame =
-  | { readonly kind: "live"; readonly lines: readonly string[] }
+  | {
+      readonly kind: "live";
+      readonly scrollbackLines: readonly string[];
+      readonly lines: readonly string[];
+    }
   | { readonly kind: "plain"; readonly lines: readonly string[] }
   | { readonly kind: "json"; readonly events: readonly LaquEvent[] }
   | { readonly kind: "none" };
 
 export interface Renderer {
   render(snapshot: RuntimeSnapshot): Frame;
+  finalize?(snapshot: RuntimeSnapshot): Frame;
 }
 
 export interface RendererDecision {
   readonly renderer: Renderer;
   readonly live: boolean;
+  readonly jsonSerialization: JsonSerialization;
 }
+
+export type JsonSerialization = "none" | "ndjson" | "array";
 
 export interface RendererOptions {
   readonly format: OutputFormat;
@@ -30,15 +38,21 @@ export interface RendererOptions {
 
 export function chooseRenderer(options: RendererOptions): RendererDecision {
   if (options.policy === "silent" || options.policy === "never") {
-    return { renderer: new NullRenderer(), live: false };
+    return { renderer: new NullRenderer(), live: false, jsonSerialization: "none" };
   }
   if (options.policy === "jsonl" || options.format === "json" || options.format === "ndjson") {
-    return { renderer: new JsonEventRenderer(), live: false };
+    return {
+      renderer: new JsonEventRenderer(),
+      live: false,
+      jsonSerialization:
+        options.policy === "jsonl" || options.format === "ndjson" ? "ndjson" : "array",
+    };
   }
   if (options.policy === "plain") {
     return {
       renderer: new PlainLogRenderer(options.theme, options.columns, options.maxRows),
       live: false,
+      jsonSerialization: "none",
     };
   }
   if (
@@ -48,15 +62,19 @@ export function chooseRenderer(options: RendererOptions): RendererDecision {
     return {
       renderer: new AnsiLiveRenderer(options.theme, options.columns, options.maxRows),
       live: true,
+      jsonSerialization: "none",
     };
   }
   return {
     renderer: new PlainLogRenderer(options.theme, options.columns, options.maxRows),
     live: false,
+    jsonSerialization: "none",
   };
 }
 
 export class AnsiLiveRenderer implements Renderer {
+  #seenLogSequence = 0;
+
   constructor(
     private readonly theme: CompiledTheme,
     private readonly columns: number,
@@ -64,8 +82,13 @@ export class AnsiLiveRenderer implements Renderer {
   ) {}
 
   render(snapshot: RuntimeSnapshot): Frame {
+    const newLogs = logsAfterSequence(snapshot.logs, this.#seenLogSequence);
+    const scrollbackLines = renderLogLines(newLogs, this.theme, this.columns);
+    this.#seenLogSequence = lastLogSequence(snapshot.logs, this.#seenLogSequence);
+
     return {
       kind: "live",
+      scrollbackLines,
       lines: rowsForSnapshot(snapshot, this.theme, this.columns, this.maxRows),
     };
   }
@@ -73,7 +96,7 @@ export class AnsiLiveRenderer implements Renderer {
 
 export class PlainLogRenderer implements Renderer {
   #seenTaskStates = new Map<string, string>();
-  #seenLogs = 0;
+  #seenLogSequence = 0;
 
   constructor(
     private readonly theme: CompiledTheme,
@@ -83,10 +106,9 @@ export class PlainLogRenderer implements Renderer {
 
   render(snapshot: RuntimeSnapshot): Frame {
     const lines: string[] = [];
-    for (const log of snapshot.logs.slice(this.#seenLogs)) {
-      lines.push(truncateToColumns(log.message, this.columns, this.theme.tokens));
-    }
-    this.#seenLogs = snapshot.logs.length;
+    const newLogs = logsAfterSequence(snapshot.logs, this.#seenLogSequence);
+    lines.push(...renderLogLines(newLogs, this.theme, this.columns));
+    this.#seenLogSequence = lastLogSequence(snapshot.logs, this.#seenLogSequence);
 
     const rows = flattenTasks(snapshot.tasks).slice(0, this.maxRows);
     pruneSeenTaskStates(this.#seenTaskStates, rows);
@@ -109,17 +131,18 @@ export class PlainLogRenderer implements Renderer {
 
 export class JsonEventRenderer implements Renderer {
   #seenTaskStates = new Map<string, string>();
-  #seenLogs = 0;
+  #seenLogSequence = 0;
+  #summaryEmitted = false;
 
   render(snapshot: RuntimeSnapshot): Frame {
     const events: LaquEvent[] = [];
     const tasks = flattenTasks(snapshot.tasks);
     pruneSeenTaskStates(this.#seenTaskStates, tasks);
 
-    for (const log of snapshot.logs.slice(this.#seenLogs)) {
+    for (const log of logsAfterSequence(snapshot.logs, this.#seenLogSequence)) {
       events.push(logEvent(log.message, log.createdAt));
     }
-    this.#seenLogs = snapshot.logs.length;
+    this.#seenLogSequence = lastLogSequence(snapshot.logs, this.#seenLogSequence);
 
     for (const task of tasks) {
       const ratio = task.aggregate.kind === "ratio" ? task.aggregate.ratio : undefined;
@@ -134,12 +157,34 @@ export class JsonEventRenderer implements Renderer {
       events.push(taskEvent(task));
     }
 
-    if (events.length > 0 && tasks.every((task) => task.status !== "running")) {
-      events.push(summaryEvent(snapshot.tasks, snapshot.createdAt));
-    }
-
     return events.length === 0 ? { kind: "none" } : { kind: "json", events };
   }
+
+  finalize(snapshot: RuntimeSnapshot): Frame {
+    const rendered = this.render(snapshot);
+    const events = rendered.kind === "json" ? [...rendered.events] : [];
+    if (!this.#summaryEmitted && snapshot.summary.total > 0) {
+      events.push(summaryEvent(snapshot.summary, snapshot.createdAt));
+      this.#summaryEmitted = true;
+    }
+    return events.length === 0 ? { kind: "none" } : { kind: "json", events };
+  }
+}
+
+function renderLogLines(
+  logs: readonly LogRecord[],
+  theme: CompiledTheme,
+  columns: number,
+): string[] {
+  return logs.map((log) => truncateToColumns(sanitizeText(log.message), columns, theme.tokens));
+}
+
+function logsAfterSequence(logs: readonly LogRecord[], seenSequence: number): readonly LogRecord[] {
+  return logs.filter((log) => log.sequence > seenSequence);
+}
+
+function lastLogSequence(logs: readonly LogRecord[], fallback: number): number {
+  return logs.at(-1)?.sequence ?? fallback;
 }
 
 export class NullRenderer implements Renderer {
@@ -159,16 +204,26 @@ function rowsForSnapshot(
   const output = visible.map((task) => renderTaskRow(task, theme, columns));
   const hidden = rows.length - visible.length;
   if (hidden > 0) {
-    output.push(truncateToColumns(`${hidden} more tasks…`, columns, theme.tokens));
+    output.push(truncateToColumns(`${hidden} more tasks...`, columns, theme.tokens));
   }
   return output;
 }
 
 function flattenTasks(tasks: readonly TaskSnapshot[]): TaskSnapshot[] {
   const rows: TaskSnapshot[] = [];
-  for (const task of tasks) {
+  const stack = [...tasks].reverse();
+  while (stack.length > 0) {
+    const task = stack.pop();
+    if (task === undefined) {
+      continue;
+    }
     rows.push(task);
-    rows.push(...flattenTasks(task.children));
+    for (let index = task.children.length - 1; index >= 0; index -= 1) {
+      const child = task.children[index];
+      if (child !== undefined) {
+        stack.push(child);
+      }
+    }
   }
   return rows;
 }
@@ -189,16 +244,17 @@ function renderTaskRow(task: TaskSnapshot, theme: CompiledTheme, columns: number
   const symbol = statusSymbol(task, theme);
   const indent = theme.tokens.indent.repeat(task.depth);
   const progress = progressText(task, theme);
-  const message = task.message === undefined ? "" : `${theme.tokens.gap}${task.message}`;
+  const safeTitle = sanitizeText(task.title);
+  const safeMessage = task.message === undefined ? undefined : sanitizeText(task.message);
+  const safeDetail = task.detail === undefined ? undefined : sanitizeText(task.detail);
+  const message = safeMessage === undefined ? "" : `${theme.tokens.gap}${safeMessage}`;
   const detail =
-    task.detail === undefined
-      ? ""
-      : `${theme.tokens.gap}${theme.format(text(task.detail, "muted"))}`;
+    safeDetail === undefined ? "" : `${theme.tokens.gap}${theme.format(text(safeDetail, "muted"))}`;
   const row = renderSegments(theme, [
     text(indent),
     text(symbol, statusStyle(task.status)),
     text(theme.tokens.gap),
-    text(task.title),
+    text(safeTitle),
     text(progress === "" ? "" : `${theme.tokens.gap}${progress}`, "accent"),
     text(message),
   ]);

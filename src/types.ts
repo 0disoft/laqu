@@ -8,8 +8,14 @@ export interface StreamTarget {
   readonly columns?: number;
   readonly rows?: number;
   write(chunk: string): boolean;
-  on?(event: "drain", listener: () => void): unknown;
-  off?(event: "drain", listener: () => void): unknown;
+  on?(
+    event: "drain" | "error" | "close" | "finish",
+    listener: (...args: readonly unknown[]) => void,
+  ): unknown;
+  off?(
+    event: "drain" | "error" | "close" | "finish",
+    listener: (...args: readonly unknown[]) => void,
+  ): unknown;
 }
 
 export interface RuntimeEnvironment {
@@ -29,8 +35,14 @@ export interface RuntimeOptions {
   readonly progressPolicy?: ProgressPolicy;
   readonly env?: RuntimeEnvironment;
   readonly maxRows?: number;
+  readonly retention?: RuntimeRetentionOptions;
   readonly theme?: ThemeInput;
   readonly manageProcessLifecycle?: boolean;
+}
+
+export interface RuntimeRetentionOptions {
+  readonly maxLogs?: number | undefined;
+  readonly maxTerminalTasks?: number | undefined;
 }
 
 export interface TaskOptions {

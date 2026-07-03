@@ -34,6 +34,7 @@ export type {
   ProgressRuntime,
   RuntimeEnvironment,
   RuntimeOptions,
+  RuntimeRetentionOptions,
   StreamCapability,
   StreamTarget,
   TaskHandle,
