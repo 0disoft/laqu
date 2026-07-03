@@ -2,7 +2,6 @@
   "name": "@0disoft/laqu",
   "version": "1.0.2",
   "description": "Reliable terminal progress and live CLI rendering primitives for TypeScript.",
-  "license": "MIT",
   "keywords": [
     "cli",
     "library",
@@ -16,6 +15,7 @@
   "bugs": {
     "url": "https://github.com/0disoft/laqu/issues"
   },
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/0disoft/laqu.git"
