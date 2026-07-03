@@ -43,6 +43,9 @@ export function createProgressRuntime(options: RuntimeOptions = {}): ProgressRun
   const store = new TaskStore();
   const coordinator = new OutputCoordinator(stderr, decision.renderer, decision.live);
   const runtime = new LaquRuntime(store, coordinator, policy);
+  if (options.manageProcessLifecycle !== false) {
+    runtime.manageProcessLifecycle();
+  }
   return runtime;
 }
 
@@ -50,6 +53,7 @@ class LaquRuntime implements ProgressRuntime {
   #timer: ReturnType<typeof setTimeout> | undefined;
   #dirty = false;
   #closed = false;
+  #processLifecycle: ProcessLifecycleLease | undefined;
 
   constructor(
     private readonly store: TaskStore,
@@ -120,9 +124,17 @@ class LaquRuntime implements ProgressRuntime {
     if (this.#closed) {
       return;
     }
+    this.#processLifecycle?.dispose();
+    this.#processLifecycle = undefined;
     await this.flush();
     await this.coordinator.close();
     this.#closed = true;
+  }
+
+  manageProcessLifecycle(): void {
+    this.#processLifecycle ??= new ProcessLifecycleLease(() => {
+      void this.close();
+    });
   }
 
   private markDirty(immediate = false): void {
@@ -146,6 +158,42 @@ class LaquRuntime implements ProgressRuntime {
       },
       Math.round(1000 / defaultFlushHz),
     );
+  }
+}
+
+class ProcessLifecycleLease {
+  readonly #onSignal: NodeJS.SignalsListener;
+  readonly #onException: NodeJS.UncaughtExceptionListener;
+  readonly #onRejection: NodeJS.UnhandledRejectionListener;
+
+  constructor(cleanup: () => void) {
+    this.#onSignal = (signal) => {
+      cleanup();
+      process.once(signal, () => {});
+      process.kill(process.pid, signal);
+    };
+    this.#onException = (error) => {
+      cleanup();
+      process.exitCode = 1;
+      setImmediate(() => {
+        throw error;
+      });
+    };
+    this.#onRejection = () => {
+      cleanup();
+      process.exitCode = 1;
+    };
+    process.once("SIGINT", this.#onSignal);
+    process.once("SIGTERM", this.#onSignal);
+    process.once("uncaughtException", this.#onException);
+    process.once("unhandledRejection", this.#onRejection);
+  }
+
+  dispose(): void {
+    process.off("SIGINT", this.#onSignal);
+    process.off("SIGTERM", this.#onSignal);
+    process.off("uncaughtException", this.#onException);
+    process.off("unhandledRejection", this.#onRejection);
   }
 }
 

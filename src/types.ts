@@ -30,6 +30,7 @@ export interface RuntimeOptions {
   readonly env?: RuntimeEnvironment;
   readonly maxRows?: number;
   readonly theme?: ThemeInput;
+  readonly manageProcessLifecycle?: boolean;
 }
 
 export interface TaskOptions {
