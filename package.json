@@ -1,7 +1,7 @@
 {
   "name": "laqu",
   "version": "0.0.0",
-  "description": "Terminal progress bars and live CLI rendering primitives for TypeScript.",
+  "description": "Reliable terminal progress and live CLI rendering primitives for TypeScript.",
   "keywords": [
     "cli",
     "library",
