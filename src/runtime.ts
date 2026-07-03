@@ -133,7 +133,7 @@ class LaquRuntime implements ProgressRuntime {
 
   manageProcessLifecycle(): void {
     this.#processLifecycle ??= new ProcessLifecycleLease(() => {
-      void this.close();
+      return this.close();
     });
   }
 
@@ -166,22 +166,23 @@ class ProcessLifecycleLease {
   readonly #onException: NodeJS.UncaughtExceptionListener;
   readonly #onRejection: NodeJS.UnhandledRejectionListener;
 
-  constructor(cleanup: () => void) {
+  constructor(cleanup: () => Promise<void>) {
     this.#onSignal = (signal) => {
-      cleanup();
-      process.once(signal, () => {});
-      process.kill(process.pid, signal);
+      void cleanup().finally(() => {
+        process.kill(process.pid, signal);
+      });
     };
     this.#onException = (error) => {
-      cleanup();
       process.exitCode = 1;
-      setImmediate(() => {
-        throw error;
+      void cleanup().finally(() => {
+        setImmediate(() => {
+          throw error;
+        });
       });
     };
     this.#onRejection = () => {
-      cleanup();
       process.exitCode = 1;
+      void cleanup();
     };
     process.once("SIGINT", this.#onSignal);
     process.once("SIGTERM", this.#onSignal);
