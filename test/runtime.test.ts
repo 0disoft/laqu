@@ -95,3 +95,19 @@ test("dirty progress updates coalesce until explicit flush", async () => {
   strictEqual(stderr.text().includes("30%"), true);
   await runtime.close();
 });
+
+test("burst progress updates do not emit one frame per mutation", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({ stderr, env: {}, streamCapability: "pipe" });
+  const task = runtime.createTask("burst", { total: 1000 });
+  const writesAfterCreate = stderr.chunks.length;
+
+  for (let index = 0; index < 1000; index += 1) {
+    task.advance(1);
+  }
+
+  strictEqual(stderr.chunks.length, writesAfterCreate);
+  await runtime.flush();
+  strictEqual(stderr.text().includes("100%"), true);
+  await runtime.close();
+});

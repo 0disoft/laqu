@@ -1,4 +1,4 @@
-import { deepStrictEqual, strictEqual } from "node:assert";
+import { deepStrictEqual, ok, strictEqual } from "node:assert";
 import test from "node:test";
 
 import {
@@ -45,6 +45,25 @@ test("weighted child aggregate is derived from children", () => {
   strictEqual(task?.aggregate.kind, "ratio");
   if (task?.aggregate.kind === "ratio") {
     strictEqual(task.aggregate.ratio, 0.8125);
+  }
+});
+
+test("large child aggregate stays deterministic under task volume", () => {
+  const store = new TaskStore();
+  const parent = store.createTask("parent");
+  let expectedRatio = 0;
+
+  for (let index = 1; index <= 1000; index += 1) {
+    const ratio = index / 1000;
+    expectedRatio += ratio;
+    store.createTask(`child-${index}`, { ratio }, parent);
+  }
+
+  const task = store.snapshot().tasks[0];
+  strictEqual(task?.children.length, 1000);
+  strictEqual(task?.aggregate.kind, "ratio");
+  if (task?.aggregate.kind === "ratio") {
+    ok(Math.abs(task.aggregate.ratio - expectedRatio / 1000) < 1e-12);
   }
 });
 

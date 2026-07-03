@@ -40,3 +40,21 @@ test("backpressure keeps only latest pending frame", async () => {
   strictEqual(stream.chunks.join("").includes("snapshot-2"), false);
   strictEqual(stream.chunks.join("").includes("snapshot-3"), true);
 });
+
+test("backpressure collapses burst frames while waiting for drain", async () => {
+  const stream = new BackpressureStream();
+  const coordinator = new OutputCoordinator(stream, renderer, false);
+
+  coordinator.render({ tasks: [], logs: [], createdAt: 1 });
+  for (let createdAt = 2; createdAt <= 1000; createdAt += 1) {
+    coordinator.render({ tasks: [], logs: [], createdAt });
+  }
+
+  strictEqual(stream.chunks.length, 1);
+  stream.emit("drain");
+  await coordinator.flush();
+
+  const output = stream.chunks.join("");
+  strictEqual(output.includes("snapshot-999"), false);
+  strictEqual(output.includes("snapshot-1000"), true);
+});
