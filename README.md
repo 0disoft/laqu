@@ -168,7 +168,9 @@ Do not mix child process output with live rendering through `stdio: "inherit"`. 
 bun install
 bun run check
 bun run pack:check
+bun run example:basic
 ```
 
 `bun run check` runs strict typecheck, OXC lint, OXC format check, Node.js built-in tests, and build output generation.
 `bun run pack:check` builds the package, runs an ESM consumer fixture through package self-reference imports, and verifies the package contents with `npm pack --dry-run --json`.
+`bun run example:basic` builds the package and runs a small live progress demo. Terminal scrollback keeps the final frame; watch the command while it runs to see the bar animate in place.

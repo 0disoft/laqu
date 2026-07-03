@@ -21,6 +21,7 @@
   },
   "files": [
     "dist",
+    "examples",
     "README.md"
   ],
   "type": "module",
@@ -48,6 +49,7 @@
     "build": "bun run clean && tsc -p tsconfig.build.json",
     "check": "bun run typecheck && bun run lint && bun run format:check && bun run test && bun run build",
     "clean": "node -e \"const fs = require('node:fs'); for (const p of ['dist', 'dist-test', 'coverage']) fs.rmSync(p, { recursive: true, force: true });\"",
+    "example:basic": "bun run build && node examples/basic.mjs",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "lint": "oxlint src test",

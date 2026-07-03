@@ -64,6 +64,25 @@ test("json progress events still use status stream by default", async () => {
   );
 });
 
+test("human progress renders themed percentage bar", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({
+    stderr,
+    env: {},
+    streamCapability: "pipe",
+    progressPolicy: "plain",
+    theme: {
+      progressComplete: "=",
+      progressIncomplete: ".",
+    },
+  });
+
+  runtime.createTask("bar", { ratio: 0.5 });
+  await runtime.close();
+
+  strictEqual(stderr.text().includes("[==========..........] 50%"), true);
+});
+
 test("scoped task succeeds and closes cleanly", async () => {
   const stderr = new FakeStream();
   const runtime = createLaqu({ stderr, env: {}, streamCapability: "pipe" });

@@ -89,7 +89,10 @@ export class PlainLogRenderer implements Renderer {
     this.#seenLogs = snapshot.logs.length;
 
     for (const row of flattenTasks(snapshot.tasks).slice(0, this.maxRows)) {
-      const state = `${row.status}:${row.message ?? ""}:${row.detail ?? ""}:${progressText(row)}`;
+      const state = `${row.status}:${row.message ?? ""}:${row.detail ?? ""}:${progressText(
+        row,
+        this.theme,
+      )}`;
       if (this.#seenTaskStates.get(row.id) === state) {
         continue;
       }
@@ -171,7 +174,7 @@ function flattenTasks(tasks: readonly TaskSnapshot[]): TaskSnapshot[] {
 function renderTaskRow(task: TaskSnapshot, theme: CompiledTheme, columns: number): string {
   const symbol = statusSymbol(task, theme);
   const indent = theme.tokens.indent.repeat(task.depth);
-  const progress = progressText(task);
+  const progress = progressText(task, theme);
   const message = task.message === undefined ? "" : `${theme.tokens.gap}${task.message}`;
   const detail =
     task.detail === undefined
@@ -222,14 +225,24 @@ function statusStyle(status: TaskStatus): "muted" | "success" | "error" | "warni
   }
 }
 
-function progressText(task: TaskSnapshot): string {
+function progressText(task: TaskSnapshot, theme: CompiledTheme): string {
   if (task.aggregate.kind === "ratio") {
     const percent = Math.round(task.aggregate.ratio * 100);
     const suffix = task.aggregate.overrun ? "+" : "";
-    return `${percent}${suffix}%`;
+    return `${progressBar(task.aggregate.ratio, task.aggregate.overrun, theme)} ${percent}${suffix}%`;
   }
   if (task.aggregate.kind === "mixed") {
     return "mixed";
   }
   return "";
+}
+
+function progressBar(ratio: number, overrun: boolean, theme: CompiledTheme): string {
+  const width = 20;
+  const completed = Math.max(0, Math.min(width, Math.round(ratio * width)));
+  const incomplete = width - completed;
+  const tail = overrun ? "+" : "";
+  return `[${theme.tokens.progressComplete.repeat(
+    completed,
+  )}${theme.tokens.progressIncomplete.repeat(incomplete)}${tail}]`;
 }
