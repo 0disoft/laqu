@@ -404,6 +404,9 @@ function aggregateProgress(
   let overrun = false;
 
   for (const child of children) {
+    if (child.weight === 0) {
+      continue;
+    }
     if (child.aggregate.kind === "mixed" || child.aggregate.kind === "none") {
       return { kind: "mixed" };
     }

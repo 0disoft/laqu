@@ -50,6 +50,7 @@ await progress.close();
 ```
 
 The API avoids ambiguous calls such as `update(42)`. Use `setCompleted(42)` for absolute progress and `advance(42)` for a delta.
+Manual tasks also honor `TaskOptions.signal`; aborting the signal marks the task cancelled with the message `aborted`.
 
 After `progress.close()` starts, the runtime stops accepting new tasks, logs, and task handle updates. Create a new runtime for later progress output.
 
@@ -129,6 +130,7 @@ Task event fields such as `parentId`, `message`, and `detail` are omitted when t
     "id": "task-1",
     "title": "download",
     "status": "running",
+    "depth": 0,
     "progress": {
       "kind": "ratio",
       "ratio": 0.5,
@@ -182,7 +184,7 @@ ANSI/control sequences are tokenized as zero-width. Text is segmented by graphem
 
 ## Child Process Output
 
-Do not mix child process output with live rendering through `stdio: "inherit"`. Pipe child output through the parent process and write it with `runtime.log()`, or close/pause the live renderer and run the child command in plain/log mode.
+Do not mix child process output with live rendering through `stdio: "inherit"`. Pipe child output through the parent process and write it with `runtime.log()`, close the runtime before handing the terminal directly to the child process, or run progress output in plain/log mode.
 
 ## Development
 
@@ -199,11 +201,11 @@ bun run example:basic
 
 ## Release
 
-GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v1.0.4` for version `1.0.4`.
+GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v1.0.5` for version `1.0.5`.
 
 ```sh
-git tag -a v1.0.4 -m "v1.0.4"
-git push origin main v1.0.4
+git tag -a v1.0.5 -m "v1.0.5"
+git push origin main v1.0.5
 ```
 
 The npm package must define a Trusted Publisher connection for GitHub Actions with organization/user `0disoft`, repository `laqu`, workflow filename `release.yml`, environment name `npm`, and `npm publish` allowed. The GitHub repository must also define an `npm` environment with required reviewers and a deployment tag rule that allows only `v*.*.*` tags.

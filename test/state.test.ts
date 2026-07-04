@@ -78,6 +78,20 @@ test("indeterminate child produces mixed aggregate instead of false percentage",
   strictEqual(store.snapshot().tasks[0]?.aggregate.kind, "mixed");
 });
 
+test("zero-weight unknown children do not poison weighted aggregate", () => {
+  const store = new TaskStore();
+  const parent = store.createTask("parent");
+  store.createTask("known", { ratio: 0.5, weight: 1 }, parent);
+  store.createTask("unknown", { weight: 0 }, parent);
+
+  const task = store.snapshot().tasks[0];
+
+  strictEqual(task?.aggregate.kind, "ratio");
+  if (task?.aggregate.kind === "ratio") {
+    strictEqual(task.aggregate.ratio, 0.5);
+  }
+});
+
 test("ratio progress clamps negative and overrun values", () => {
   deepStrictEqual(ratioProgress(-1), { kind: "ratio", ratio: 0, overrun: false });
   deepStrictEqual(ratioProgress(2), { kind: "ratio", ratio: 1, overrun: true });

@@ -296,6 +296,9 @@ function statusStyle(status: TaskStatus): "muted" | "success" | "error" | "warni
 }
 
 function progressText(task: TaskSnapshot, theme: CompiledTheme): string {
+  if (task.progress.kind === "indeterminate") {
+    return theme.tokens.progressIndeterminate;
+  }
   if (task.aggregate.kind === "ratio") {
     const percent = Math.round(task.aggregate.ratio * 100);
     const suffix = task.aggregate.overrun ? "+" : "";

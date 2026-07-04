@@ -8,11 +8,26 @@ export type AnsiToken =
   | { readonly kind: "ansi"; readonly value: string }
   | { readonly kind: "text"; readonly value: string };
 
+interface SgrState {
+  intensity: boolean;
+  italic: boolean;
+  underline: boolean;
+  blink: boolean;
+  inverse: boolean;
+  conceal: boolean;
+  strike: boolean;
+  overline: boolean;
+  foreground: boolean;
+  background: boolean;
+  underlineColor: boolean;
+}
+
 // CSI, OSC, and common one-byte ESC sequences.
 const ansiPattern = new RegExp(
   String.raw`\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007]*(?:\u0007|\u001b\\)|[@-Z\\-_])`,
   "g",
 );
+const resetSequence = "\u001b[0m";
 const unsafeControlPattern = new RegExp(String.raw`[\u0000-\u0008\u000a-\u001f\u007f-\u009f]`, "g");
 const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
@@ -75,7 +90,11 @@ export function truncateToColumns(
     return "";
   }
 
-  const marker = options.overflowMarker ?? "";
+  const requestedMarker = options.overflowMarker ?? "";
+  const marker =
+    displayWidth(requestedMarker, options) > columns
+      ? truncateToColumns(requestedMarker, columns, { ...options, overflowMarker: "" })
+      : requestedMarker;
   const markerWidth = displayWidth(marker, options);
   const target = marker === "" ? columns : Math.max(0, columns - markerWidth);
   let used = 0;
@@ -103,7 +122,8 @@ export function truncateToColumns(
     }
   }
 
-  return truncated ? `${output}${marker}` : output;
+  const result = truncated ? `${output}${marker}` : output;
+  return needsSgrReset(result) ? `${result}${resetSequence}` : result;
 }
 
 export function wrapToColumns(
@@ -197,6 +217,8 @@ function isCombining(codePoint: number): boolean {
     (codePoint >= 0x1ab0 && codePoint <= 0x1aff) ||
     (codePoint >= 0x1dc0 && codePoint <= 0x1dff) ||
     (codePoint >= 0x20d0 && codePoint <= 0x20ff) ||
+    (codePoint >= 0xfe00 && codePoint <= 0xfe0f) ||
+    (codePoint >= 0xe0100 && codePoint <= 0xe01ef) ||
     (codePoint >= 0xfe20 && codePoint <= 0xfe2f)
   );
 }
@@ -213,7 +235,8 @@ function isFullWidth(codePoint: number): boolean {
       (codePoint >= 0xfe10 && codePoint <= 0xfe19) ||
       (codePoint >= 0xfe30 && codePoint <= 0xfe6f) ||
       (codePoint >= 0xff00 && codePoint <= 0xff60) ||
-      (codePoint >= 0xffe0 && codePoint <= 0xffe6))
+      (codePoint >= 0xffe0 && codePoint <= 0xffe6) ||
+      (codePoint >= 0x20000 && codePoint <= 0x3fffd))
   );
 }
 
@@ -223,5 +246,164 @@ function isAmbiguous(codePoint: number): boolean {
     (codePoint >= 0x2010 && codePoint <= 0x2027) ||
     (codePoint >= 0x2121 && codePoint <= 0x22ff) ||
     (codePoint >= 0x2460 && codePoint <= 0x24ff)
+  );
+}
+
+function needsSgrReset(input: string): boolean {
+  const state = emptySgrState();
+  for (const token of tokenizeAnsi(input)) {
+    if (token.kind !== "ansi" || !token.value.startsWith("\u001b[") || !token.value.endsWith("m")) {
+      continue;
+    }
+    applySgrSequence(state, token.value);
+  }
+  return isSgrActive(state);
+}
+
+function applySgrSequence(state: SgrState, sequence: string): void {
+  const body = sequence.slice(2, -1);
+  const params = body === "" ? [0] : body.split(/[;:]/).map((part) => Number(part || 0));
+  for (const param of params) {
+    applySgrParam(state, param);
+  }
+}
+
+function applySgrParam(state: SgrState, param: number): void {
+  if (param === 0) {
+    resetSgrState(state);
+    return;
+  }
+  if (param === 1 || param === 2) {
+    state.intensity = true;
+    return;
+  }
+  if (param === 3) {
+    state.italic = true;
+    return;
+  }
+  if (param === 4 || param === 21) {
+    state.underline = true;
+    return;
+  }
+  if (param === 5 || param === 6) {
+    state.blink = true;
+    return;
+  }
+  if (param === 7) {
+    state.inverse = true;
+    return;
+  }
+  if (param === 8) {
+    state.conceal = true;
+    return;
+  }
+  if (param === 9) {
+    state.strike = true;
+    return;
+  }
+  if (param === 53) {
+    state.overline = true;
+    return;
+  }
+  if (param === 38 || (param >= 30 && param <= 37) || (param >= 90 && param <= 97)) {
+    state.foreground = true;
+    return;
+  }
+  if (param === 48 || (param >= 40 && param <= 47) || (param >= 100 && param <= 107)) {
+    state.background = true;
+    return;
+  }
+  if (param === 58) {
+    state.underlineColor = true;
+    return;
+  }
+  if (param === 22) {
+    state.intensity = false;
+    return;
+  }
+  if (param === 23) {
+    state.italic = false;
+    return;
+  }
+  if (param === 24) {
+    state.underline = false;
+    return;
+  }
+  if (param === 25) {
+    state.blink = false;
+    return;
+  }
+  if (param === 27) {
+    state.inverse = false;
+    return;
+  }
+  if (param === 28) {
+    state.conceal = false;
+    return;
+  }
+  if (param === 29) {
+    state.strike = false;
+    return;
+  }
+  if (param === 39) {
+    state.foreground = false;
+    return;
+  }
+  if (param === 49) {
+    state.background = false;
+    return;
+  }
+  if (param === 55) {
+    state.overline = false;
+    return;
+  }
+  if (param === 59) {
+    state.underlineColor = false;
+  }
+}
+
+function emptySgrState(): SgrState {
+  return {
+    intensity: false,
+    italic: false,
+    underline: false,
+    blink: false,
+    inverse: false,
+    conceal: false,
+    strike: false,
+    overline: false,
+    foreground: false,
+    background: false,
+    underlineColor: false,
+  };
+}
+
+function resetSgrState(state: SgrState): void {
+  state.intensity = false;
+  state.italic = false;
+  state.underline = false;
+  state.blink = false;
+  state.inverse = false;
+  state.conceal = false;
+  state.strike = false;
+  state.overline = false;
+  state.foreground = false;
+  state.background = false;
+  state.underlineColor = false;
+}
+
+function isSgrActive(state: SgrState): boolean {
+  return (
+    state.intensity ||
+    state.italic ||
+    state.underline ||
+    state.blink ||
+    state.inverse ||
+    state.conceal ||
+    state.strike ||
+    state.overline ||
+    state.foreground ||
+    state.background ||
+    state.underlineColor
   );
 }

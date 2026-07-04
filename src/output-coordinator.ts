@@ -87,6 +87,7 @@ export class OutputCoordinator {
       } else if (cursor.length > 0) {
         this.#writeRaw(`${cursor}\u001b[0m`);
       }
+      await this.flush();
     }
     this.lease.closed = true;
     this.lease.renderedLineCount = 0;
@@ -218,8 +219,21 @@ function sameLines(left: readonly string[], right: readonly string[]): boolean {
 }
 
 function mergePendingFrame(previous: Frame | undefined, next: Frame): Frame {
+  if (previous === undefined) {
+    return next;
+  }
   if (previous?.kind === "json" && next.kind === "json") {
     return { kind: "json", events: [...previous.events, ...next.events] };
+  }
+  if (previous.kind === "plain" && next.kind === "plain") {
+    return { kind: "plain", lines: [...previous.lines, ...next.lines] };
+  }
+  if (previous.kind === "live" && next.kind === "live") {
+    return {
+      kind: "live",
+      scrollbackLines: [...previous.scrollbackLines, ...next.scrollbackLines],
+      lines: next.lines,
+    };
   }
   return next;
 }

@@ -5,6 +5,7 @@ import {
   ratioProgress,
   setCompletedProgress,
   setTotalProgress,
+  type ProgressState,
   TaskStore,
 } from "./task-store.js";
 import { compileTheme } from "./theme.js";
@@ -36,13 +37,15 @@ export function createProgressRuntime(options: RuntimeOptions = {}): ProgressRun
   const capability = options.streamCapability ?? detectCapability(stderr, env);
   const policy = options.progressPolicy ?? "auto";
   const theme = compileTheme({ useColor: defaultUseColor(capability, env), ...options.theme });
+  const columns = normalizedColumns(stderr.columns);
+  const maxRows = validatedPositiveSafeInteger(options.maxRows ?? 12, "maxRows");
   const rendererOptions = {
     format: options.format ?? "human",
     policy,
     capability,
     theme,
-    columns: stderr.columns ?? 80,
-    maxRows: options.maxRows ?? 12,
+    columns,
+    maxRows,
   };
   const initialDecision = chooseRenderer(rendererOptions);
   const liveStreamLease = initialDecision.live ? acquireLiveStreamLease(stderr) : undefined;
@@ -102,11 +105,6 @@ class LaquRuntime implements ProgressRuntime {
     }
 
     const handle = this.createTask(title, options);
-    const onAbort = () => handle.cancel("aborted");
-    options.signal?.addEventListener("abort", onAbort, { once: true });
-    if (options.signal?.aborted === true) {
-      handle.cancel("aborted");
-    }
     try {
       const result = await callback(handle);
       handle.succeed();
@@ -116,14 +114,13 @@ class LaquRuntime implements ProgressRuntime {
         if (options.signal?.aborted === true) {
           this.store.forceTerminalUpdate(handle.id, { status: "cancelled", message: "aborted" });
         } else {
-          const message = error instanceof Error ? error.message : undefined;
+          const message = unknownToMessage(error);
           this.store.forceTerminalUpdate(handle.id, { status: "failed", message });
         }
         this.markDirty(true);
       }
       throw error;
     } finally {
-      options.signal?.removeEventListener("abort", onAbort);
       await this.flush();
     }
   }
@@ -137,6 +134,7 @@ class LaquRuntime implements ProgressRuntime {
       (immediate) => this.markDirty(immediate),
       () => this.#assertAcceptsMutations(),
     );
+    handle.bindSignal(options.signal);
     this.markDirty(true);
     return handle;
   }
@@ -270,6 +268,8 @@ class ProcessLifecycleLease {
 }
 
 class StoreTaskHandle implements TaskHandle {
+  #abortCleanup: (() => void) | undefined;
+
   constructor(
     readonly id: string,
     private readonly store: TaskStore,
@@ -277,9 +277,24 @@ class StoreTaskHandle implements TaskHandle {
     private readonly assertWritable: () => void,
   ) {}
 
+  bindSignal(signal: AbortSignal | undefined): void {
+    if (signal === undefined) {
+      return;
+    }
+    if (signal.aborted) {
+      this.cancel("aborted");
+      return;
+    }
+    const onAbort = () => this.cancel("aborted");
+    signal.addEventListener("abort", onAbort, { once: true });
+    this.#abortCleanup = () => signal.removeEventListener("abort", onAbort);
+  }
+
   setTotal(total: number): void {
     this.assertWritable();
-    this.store.update(this.id, { progress: setTotalProgress(total) });
+    this.store.update(this.id, {
+      progress: setTotalProgress(total, currentProgressValue(this.store.getProgress(this.id))),
+    });
     this.onChange(false);
   }
 
@@ -311,7 +326,10 @@ class StoreTaskHandle implements TaskHandle {
 
   setIndeterminate(message?: string): void {
     this.assertWritable();
-    this.store.update(this.id, { progress: { kind: "indeterminate" }, message });
+    this.store.update(this.id, {
+      progress: { kind: "indeterminate" },
+      ...(message === undefined ? {} : { message }),
+    });
     this.onChange(false);
   }
 
@@ -329,20 +347,32 @@ class StoreTaskHandle implements TaskHandle {
 
   succeed(message?: string): void {
     this.assertWritable();
-    this.store.update(this.id, { status: "succeeded", message });
+    this.store.update(this.id, {
+      status: "succeeded",
+      ...(message === undefined ? {} : { message }),
+    });
+    this.#disposeAbortCleanup();
     this.onChange(true);
   }
 
   fail(error?: unknown): void {
     this.assertWritable();
-    const message = error instanceof Error ? error.message : undefined;
-    this.store.update(this.id, { status: "failed", message });
+    const message = unknownToMessage(error);
+    this.store.update(this.id, {
+      status: "failed",
+      ...(message === undefined ? {} : { message }),
+    });
+    this.#disposeAbortCleanup();
     this.onChange(true);
   }
 
   cancel(message?: string): void {
     this.assertWritable();
-    this.store.update(this.id, { status: "cancelled", message });
+    this.store.update(this.id, {
+      status: "cancelled",
+      ...(message === undefined ? {} : { message }),
+    });
+    this.#disposeAbortCleanup();
     this.onChange(true);
   }
 
@@ -350,7 +380,14 @@ class StoreTaskHandle implements TaskHandle {
     this.assertWritable();
     const id = this.store.createTask(title, options, this.id);
     this.onChange(true);
-    return new StoreTaskHandle(id, this.store, this.onChange, this.assertWritable);
+    const handle = new StoreTaskHandle(id, this.store, this.onChange, this.assertWritable);
+    handle.bindSignal(options.signal);
+    return handle;
+  }
+
+  #disposeAbortCleanup(): void {
+    this.#abortCleanup?.();
+    this.#abortCleanup = undefined;
   }
 }
 
@@ -368,10 +405,65 @@ function defaultUseColor(capability: StreamCapability, env: RuntimeEnvironment):
   if (env.NO_COLOR !== undefined) {
     return false;
   }
+  if (env.FORCE_COLOR === "0") {
+    return false;
+  }
   if (env.FORCE_COLOR !== undefined && env.FORCE_COLOR !== "0") {
     return true;
   }
   return capability === "tty";
+}
+
+function currentProgressValue(progress: ProgressState): number {
+  switch (progress.kind) {
+    case "counter":
+    case "determinate":
+      return progress.current;
+    case "indeterminate":
+    case "none":
+    case "ratio":
+      return 0;
+  }
+}
+
+function normalizedColumns(columns: number | undefined): number {
+  if (typeof columns === "number" && Number.isSafeInteger(columns) && columns > 0) {
+    return columns;
+  }
+  return 80;
+}
+
+function validatedPositiveSafeInteger(value: number, name: string): number {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new TypeError(`${name} must be a safe positive integer`);
+  }
+  return value;
+}
+
+function unknownToMessage(error: unknown): string | undefined {
+  if (error === undefined) {
+    return undefined;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  if (
+    error === null ||
+    typeof error === "number" ||
+    typeof error === "boolean" ||
+    typeof error === "bigint" ||
+    typeof error === "symbol"
+  ) {
+    return String(error);
+  }
+  try {
+    return JSON.stringify(error) ?? String(error);
+  } catch {
+    return String(error);
+  }
 }
 
 function acquireLiveStreamLease(stream: StreamTarget): LiveStreamLease | undefined {

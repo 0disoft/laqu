@@ -30,8 +30,10 @@ test("OSC hyperlink sequence is zero width", () => {
 test("width corpus covers Korean CJK emoji combining marks and tabs", () => {
   strictEqual(displayWidth("한글"), 4);
   strictEqual(displayWidth("表"), 2);
+  strictEqual(displayWidth("𠀀"), 2);
   strictEqual(displayWidth("👩‍💻"), 2);
   strictEqual(displayWidth("e\u0301"), 1);
+  strictEqual(displayWidth("a\uFE0F"), 1);
   strictEqual(displayWidth("a\tb", { tabSize: 2 }), 4);
 });
 
@@ -43,15 +45,31 @@ test("ambiguous width can be overridden", () => {
 test("truncate never cuts through ANSI sequence or grapheme", () => {
   const red = "\u001b[31m한글\u001b[0m";
 
-  strictEqual(truncateToColumns(red, 3, { overflowMarker: "…" }), "\u001b[31m한…");
+  strictEqual(truncateToColumns(red, 3, { overflowMarker: "…" }), "\u001b[31m한…\u001b[0m");
   strictEqual(displayWidth(truncateToColumns("👩‍💻abc", 3, { overflowMarker: "…" })), 3);
 });
 
 test("truncate preserves reset sequences that were already opened before visible text", () => {
   const truncated = truncateToColumns("\u001b[32mabcdef\u001b[0m", 4, { overflowMarker: "…" });
 
-  strictEqual(truncated, "\u001b[32mabc…");
+  strictEqual(truncated, "\u001b[32mabc…\u001b[0m");
   strictEqual(displayWidth(truncated), 4);
+});
+
+test("truncate resets SGR sequences that reset and then reopen style", () => {
+  const truncated = truncateToColumns("\u001b[0;31mabcdef\u001b[0m", 4, {
+    overflowMarker: "…",
+  });
+
+  strictEqual(truncated, "\u001b[0;31mabc…\u001b[0m");
+  strictEqual(displayWidth(truncated), 4);
+});
+
+test("truncate never lets overflow marker exceed target columns", () => {
+  const truncated = truncateToColumns("abcdef", 1, { overflowMarker: "..." });
+
+  strictEqual(truncated, ".");
+  strictEqual(displayWidth(truncated), 1);
 });
 
 test("wrap respects column width without relying on terminal autowrap", () => {

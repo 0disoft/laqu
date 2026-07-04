@@ -279,6 +279,155 @@ test("pipe plain output disables ANSI color by default", async () => {
   strictEqual(stderr.text().includes("\u001b["), false);
 });
 
+test("FORCE_COLOR=0 disables ANSI color on tty output", async () => {
+  const stderr = new FakeStream();
+  stderr.isTTY = true;
+  const runtime = createLaqu({
+    stderr,
+    env: { FORCE_COLOR: "0" },
+    streamCapability: "tty",
+    progressPolicy: "plain",
+  });
+
+  const task = runtime.createTask("no color", { ratio: 1 });
+  task.succeed();
+  await runtime.close();
+
+  strictEqual(stderr.text().includes("\u001b["), false);
+});
+
+test("scoped success without message preserves the latest message", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({
+    stderr,
+    env: {},
+    format: "ndjson",
+    streamCapability: "pipe",
+  });
+
+  await runtime.task("message scope", (task) => {
+    task.setMessage("bundling");
+  });
+  await runtime.close();
+
+  const taskEvents = stderr
+    .text()
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map(
+      (line) =>
+        JSON.parse(line) as {
+          readonly type?: string;
+          readonly task?: { readonly status?: string; readonly message?: string };
+        },
+    )
+    .filter((event) => event.type === "task");
+  const finalTaskEvent = taskEvents.at(-1);
+  strictEqual(finalTaskEvent?.task?.status, "succeeded");
+  strictEqual(finalTaskEvent?.task?.message, "bundling");
+});
+
+test("string failures are preserved as task messages", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({
+    stderr,
+    env: {},
+    format: "ndjson",
+    streamCapability: "pipe",
+  });
+
+  await rejects(
+    runtime.task("string failure", () => {
+      throw "boom";
+    }),
+    (error) => {
+      strictEqual(error, "boom");
+      return true;
+    },
+  );
+  await runtime.close();
+
+  strictEqual(stderr.text().includes('"message":"boom"'), true);
+});
+
+test("manual task abort signal cancels the task", async () => {
+  const stderr = new FakeStream();
+  const controller = new AbortController();
+  const runtime = createLaqu({
+    stderr,
+    env: {},
+    format: "ndjson",
+    streamCapability: "pipe",
+  });
+
+  runtime.createTask("manual abort", { signal: controller.signal });
+  controller.abort();
+  await runtime.close();
+
+  const taskEvents = stderr
+    .text()
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map(
+      (line) =>
+        JSON.parse(line) as {
+          readonly type?: string;
+          readonly task?: { readonly status?: string; readonly message?: string };
+        },
+    )
+    .filter((event) => event.type === "task");
+  const finalTaskEvent = taskEvents.at(-1);
+  strictEqual(finalTaskEvent?.task?.status, "cancelled");
+  strictEqual(finalTaskEvent?.task?.message, "aborted");
+});
+
+test("setTotal preserves a previously known completed count", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({
+    stderr,
+    env: {},
+    streamCapability: "pipe",
+    progressPolicy: "plain",
+  });
+
+  const task = runtime.createTask("late total");
+  task.setCompleted(5);
+  task.setTotal(10);
+  await runtime.close();
+
+  strictEqual(stderr.text().includes("50%"), true);
+});
+
+test("runtime rejects invalid maxRows values", () => {
+  throws(() => createLaqu({ stderr: new FakeStream(), env: {}, maxRows: 0 }), {
+    name: "TypeError",
+    message: "maxRows must be a safe positive integer",
+  });
+  throws(() => createLaqu({ stderr: new FakeStream(), env: {}, maxRows: Number.NaN }), {
+    name: "TypeError",
+    message: "maxRows must be a safe positive integer",
+  });
+});
+
+test("indeterminate leaf renders as indeterminate instead of mixed", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({
+    stderr,
+    env: {},
+    streamCapability: "pipe",
+    progressPolicy: "plain",
+  });
+
+  const task = runtime.createTask("loading");
+  task.setIndeterminate("fetching");
+  await runtime.close();
+
+  strictEqual(stderr.text().includes("mixed"), false);
+  strictEqual(stderr.text().includes("~"), true);
+});
+
 test("runtime log retention can drop log output", async () => {
   const stderr = new FakeStream();
   const runtime = createLaqu({
