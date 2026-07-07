@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events";
 import test from "node:test";
 
 import { createLaqu } from "../src/index.js";
+import { unknownToRejectionError } from "../src/runtime.js";
 import type { StreamTarget } from "../src/types.js";
 
 class FakeStream implements StreamTarget {
@@ -37,6 +38,30 @@ class DeferredDrainStream extends EventEmitter implements StreamTarget {
 
   text(): string {
     return this.chunks.join("");
+  }
+}
+
+class ManualAbortSignal {
+  aborted = false;
+  readonly listeners = new Set<() => void>();
+
+  addEventListener(event: string, listener: unknown): void {
+    if (event === "abort" && typeof listener === "function") {
+      this.listeners.add(listener as () => void);
+    }
+  }
+
+  removeEventListener(event: string, listener: unknown): void {
+    if (event === "abort" && typeof listener === "function") {
+      this.listeners.delete(listener as () => void);
+    }
+  }
+
+  abort(): void {
+    this.aborted = true;
+    for (const listener of this.listeners) {
+      listener();
+    }
   }
 }
 
@@ -383,6 +408,37 @@ test("manual task abort signal cancels the task", async () => {
   strictEqual(finalTaskEvent?.task?.message, "aborted");
 });
 
+test("runtime close removes abort listeners for unfinished tasks", async () => {
+  const stderr = new FakeStream();
+  const signal = new ManualAbortSignal();
+  const runtime = createLaqu({
+    stderr,
+    env: {},
+    format: "ndjson",
+    streamCapability: "pipe",
+  });
+
+  runtime.createTask("pending abort cleanup", { signal: signal as unknown as AbortSignal });
+  strictEqual(signal.listeners.size, 1);
+  await runtime.close();
+
+  strictEqual(signal.listeners.size, 0);
+  signal.abort();
+});
+
+test("scoped task result survives runtime close during callback", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({ stderr, env: {}, streamCapability: "pipe" });
+
+  const result = await runtime.task("close during scope", async () => {
+    await runtime.close();
+    return 9;
+  });
+
+  strictEqual(result, 9);
+  strictEqual(stderr.text().includes("close during scope"), true);
+});
+
 test("setTotal preserves a previously known completed count", async () => {
   const stderr = new FakeStream();
   const runtime = createLaqu({
@@ -573,6 +629,14 @@ test("process lifecycle handlers are opt-in and disposed on close", async () => 
 
   await managedRuntime.close();
   deepStrictEqual(processLifecycleListenerCounts(), before);
+});
+
+test("process lifecycle preserves non-Error rejection reasons", () => {
+  const reason = { code: "CUSTOM_REJECTION" };
+  const error = unknownToRejectionError(reason);
+
+  strictEqual(error.message, 'Unhandled promise rejection: {"code":"CUSTOM_REJECTION"}');
+  strictEqual((error as Error & { readonly cause?: unknown }).cause, reason);
 });
 
 test("dirty progress updates coalesce until explicit flush", async () => {

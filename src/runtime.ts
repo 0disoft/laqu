@@ -79,6 +79,7 @@ class LaquRuntime implements ProgressRuntime {
   #closing = false;
   #closed = false;
   #processLifecycle: ProcessLifecycleLease | undefined;
+  readonly #handles = new Set<StoreTaskHandle>();
 
   constructor(
     private readonly store: TaskStore,
@@ -107,7 +108,9 @@ class LaquRuntime implements ProgressRuntime {
     const handle = this.createTask(title, options);
     try {
       const result = await callback(handle);
-      handle.succeed();
+      if (this.#acceptsMutations()) {
+        handle.succeed();
+      }
       return result;
     } catch (error) {
       if (this.#acceptsMutations()) {
@@ -128,12 +131,7 @@ class LaquRuntime implements ProgressRuntime {
   createTask(title: string, options: TaskOptions = {}): TaskHandle {
     this.#assertAcceptsMutations();
     const id = this.store.createTask(title, options);
-    const handle = new StoreTaskHandle(
-      id,
-      this.store,
-      (immediate) => this.markDirty(immediate),
-      () => this.#assertAcceptsMutations(),
-    );
+    const handle = this.#createHandle(id);
     handle.bindSignal(options.signal);
     this.markDirty(true);
     return handle;
@@ -182,6 +180,9 @@ class LaquRuntime implements ProgressRuntime {
     this.#closing = true;
     this.#processLifecycle?.dispose();
     this.#processLifecycle = undefined;
+    for (const handle of this.#handles) {
+      handle.dispose();
+    }
     try {
       await this.flush();
       this.#closed = true;
@@ -224,6 +225,31 @@ class LaquRuntime implements ProgressRuntime {
       throw new Error("Laqu runtime is closing");
     }
   }
+
+  #createHandle(id: string): StoreTaskHandle {
+    let handle: StoreTaskHandle;
+    handle = new StoreTaskHandle(
+      id,
+      this.store,
+      (immediate) => this.markDirty(immediate),
+      () => this.#assertAcceptsMutations(),
+      (parentId, title, options) => this.#createChildHandle(parentId, title, options),
+      () => {
+        this.#handles.delete(handle);
+      },
+    );
+    this.#handles.add(handle);
+    return handle;
+  }
+
+  #createChildHandle(parentId: string, title: string, options: TaskOptions): StoreTaskHandle {
+    this.#assertAcceptsMutations();
+    const id = this.store.createTask(title, options, parentId);
+    const handle = this.#createHandle(id);
+    handle.bindSignal(options.signal);
+    this.markDirty(true);
+    return handle;
+  }
 }
 
 class ProcessLifecycleLease {
@@ -249,7 +275,7 @@ class ProcessLifecycleLease {
       process.exitCode = 1;
       void cleanup().finally(() => {
         setImmediate(() => {
-          throw reason instanceof Error ? reason : new Error("Unhandled promise rejection");
+          throw unknownToRejectionError(reason);
         });
       });
     };
@@ -275,6 +301,12 @@ class StoreTaskHandle implements TaskHandle {
     private readonly store: TaskStore,
     private readonly onChange: (immediate: boolean) => void,
     private readonly assertWritable: () => void,
+    private readonly createChildHandle: (
+      parentId: string,
+      title: string,
+      options: TaskOptions,
+    ) => TaskHandle,
+    private readonly onDispose: () => void,
   ) {}
 
   bindSignal(signal: AbortSignal | undefined): void {
@@ -288,6 +320,11 @@ class StoreTaskHandle implements TaskHandle {
     const onAbort = () => this.cancel("aborted");
     signal.addEventListener("abort", onAbort, { once: true });
     this.#abortCleanup = () => signal.removeEventListener("abort", onAbort);
+  }
+
+  dispose(): void {
+    this.#disposeAbortCleanup();
+    this.onDispose();
   }
 
   setTotal(total: number): void {
@@ -351,7 +388,7 @@ class StoreTaskHandle implements TaskHandle {
       status: "succeeded",
       ...(message === undefined ? {} : { message }),
     });
-    this.#disposeAbortCleanup();
+    this.dispose();
     this.onChange(true);
   }
 
@@ -362,7 +399,7 @@ class StoreTaskHandle implements TaskHandle {
       status: "failed",
       ...(message === undefined ? {} : { message }),
     });
-    this.#disposeAbortCleanup();
+    this.dispose();
     this.onChange(true);
   }
 
@@ -372,17 +409,13 @@ class StoreTaskHandle implements TaskHandle {
       status: "cancelled",
       ...(message === undefined ? {} : { message }),
     });
-    this.#disposeAbortCleanup();
+    this.dispose();
     this.onChange(true);
   }
 
   child(title: string, options: TaskOptions = {}): TaskHandle {
     this.assertWritable();
-    const id = this.store.createTask(title, options, this.id);
-    this.onChange(true);
-    const handle = new StoreTaskHandle(id, this.store, this.onChange, this.assertWritable);
-    handle.bindSignal(options.signal);
-    return handle;
+    return this.createChildHandle(this.id, title, options);
   }
 
   #disposeAbortCleanup(): void {
@@ -464,6 +497,19 @@ function unknownToMessage(error: unknown): string | undefined {
   } catch {
     return String(error);
   }
+}
+
+export function unknownToRejectionError(reason: unknown): Error {
+  if (reason instanceof Error) {
+    return reason;
+  }
+  const message = unknownToMessage(reason);
+  return new Error(
+    message === undefined
+      ? "Unhandled promise rejection"
+      : `Unhandled promise rejection: ${message}`,
+    { cause: reason },
+  );
 }
 
 function acquireLiveStreamLease(stream: StreamTarget): LiveStreamLease | undefined {

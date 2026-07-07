@@ -70,11 +70,16 @@ export function graphemes(input: string): string[] {
 
 export function displayWidth(input: string, options: WidthOptions = {}): number {
   let width = 0;
+  const tabSize = normalizedTabSize(options.tabSize);
   for (const token of tokenizeAnsi(input)) {
     if (token.kind === "ansi") {
       continue;
     }
-    for (const cluster of graphemes(expandTabs(token.value, options.tabSize ?? 8))) {
+    for (const cluster of graphemes(token.value)) {
+      if (cluster === "\t") {
+        width += tabWidthAtColumn(width, tabSize);
+        continue;
+      }
       width += clusterWidth(cluster, options.ambiguousWidth ?? 1);
     }
   }
@@ -97,6 +102,7 @@ export function truncateToColumns(
       : requestedMarker;
   const markerWidth = displayWidth(marker, options);
   const target = marker === "" ? columns : Math.max(0, columns - markerWidth);
+  const tabSize = normalizedTabSize(options.tabSize);
   let used = 0;
   let truncated = false;
   let output = "";
@@ -107,13 +113,16 @@ export function truncateToColumns(
       continue;
     }
 
-    for (const cluster of graphemes(expandTabs(token.value, options.tabSize ?? 8))) {
-      const width = clusterWidth(cluster, options.ambiguousWidth ?? 1);
+    for (const cluster of graphemes(token.value)) {
+      const width =
+        cluster === "\t"
+          ? tabWidthAtColumn(used, tabSize)
+          : clusterWidth(cluster, options.ambiguousWidth ?? 1);
       if (used + width > target) {
         truncated = true;
         break;
       }
-      output += cluster;
+      output += cluster === "\t" ? " ".repeat(width) : cluster;
       used += width;
     }
 
@@ -138,6 +147,7 @@ export function wrapToColumns(
   const lines: string[] = [];
   let current = "";
   let used = 0;
+  const tabSize = normalizedTabSize(options.tabSize);
 
   for (const token of tokenizeAnsi(input)) {
     if (token.kind === "ansi") {
@@ -145,7 +155,7 @@ export function wrapToColumns(
       continue;
     }
 
-    for (const cluster of graphemes(expandTabs(token.value, options.tabSize ?? 8))) {
+    for (const cluster of graphemes(token.value)) {
       if (cluster === "\n") {
         lines.push(current);
         current = "";
@@ -153,13 +163,16 @@ export function wrapToColumns(
         continue;
       }
 
-      const width = clusterWidth(cluster, options.ambiguousWidth ?? 1);
+      const width =
+        cluster === "\t"
+          ? tabWidthAtColumn(used, tabSize)
+          : clusterWidth(cluster, options.ambiguousWidth ?? 1);
       if (used > 0 && used + width > columns) {
         lines.push(current);
         current = "";
         used = 0;
       }
-      current += cluster;
+      current += cluster === "\t" ? " ".repeat(width) : cluster;
       used += width;
     }
   }
@@ -168,11 +181,12 @@ export function wrapToColumns(
   return lines;
 }
 
-function expandTabs(input: string, tabSize: number): string {
-  if (!input.includes("\t")) {
-    return input;
-  }
-  return input.replaceAll("\t", " ".repeat(Math.max(1, tabSize)));
+function normalizedTabSize(tabSize: number | undefined): number {
+  return Math.max(1, tabSize ?? 8);
+}
+
+function tabWidthAtColumn(column: number, tabSize: number): number {
+  return tabSize - (column % tabSize);
 }
 
 function clusterWidth(cluster: string, ambiguousWidth: 1 | 2): number {
@@ -263,9 +277,26 @@ function needsSgrReset(input: string): boolean {
 function applySgrSequence(state: SgrState, sequence: string): void {
   const body = sequence.slice(2, -1);
   const params = body === "" ? [0] : body.split(/[;:]/).map((part) => Number(part || 0));
-  for (const param of params) {
+  for (let index = 0; index < params.length; index += 1) {
+    const param = params[index] ?? 0;
+    if (param === 38 || param === 48 || param === 58) {
+      applySgrParam(state, param);
+      index += sgrExtendedColorParamCount(params, index + 1);
+      continue;
+    }
     applySgrParam(state, param);
   }
+}
+
+function sgrExtendedColorParamCount(params: readonly number[], modeIndex: number): number {
+  const mode = params[modeIndex];
+  if (mode === 2) {
+    return 4;
+  }
+  if (mode === 5) {
+    return 2;
+  }
+  return 0;
 }
 
 function applySgrParam(state: SgrState, param: number): void {

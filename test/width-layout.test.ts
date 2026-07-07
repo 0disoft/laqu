@@ -34,7 +34,8 @@ test("width corpus covers Korean CJK emoji combining marks and tabs", () => {
   strictEqual(displayWidth("👩‍💻"), 2);
   strictEqual(displayWidth("e\u0301"), 1);
   strictEqual(displayWidth("a\uFE0F"), 1);
-  strictEqual(displayWidth("a\tb", { tabSize: 2 }), 4);
+  strictEqual(displayWidth("a\tb", { tabSize: 2 }), 3);
+  strictEqual(displayWidth("abc\tz", { tabSize: 8 }), 9);
 });
 
 test("ambiguous width can be overridden", () => {
@@ -65,6 +66,20 @@ test("truncate resets SGR sequences that reset and then reopen style", () => {
   strictEqual(displayWidth(truncated), 4);
 });
 
+test("truncate resets extended SGR color sequences", () => {
+  const trueColor = truncateToColumns("\u001b[38;2;255;128;0mabcdef", 4, {
+    overflowMarker: "…",
+  });
+  const indexedColor = truncateToColumns("\u001b[48;5;196mabcdef", 4, {
+    overflowMarker: "…",
+  });
+
+  strictEqual(trueColor, "\u001b[38;2;255;128;0mabc…\u001b[0m");
+  strictEqual(indexedColor, "\u001b[48;5;196mabc…\u001b[0m");
+  strictEqual(displayWidth(trueColor), 4);
+  strictEqual(displayWidth(indexedColor), 4);
+});
+
 test("truncate never lets overflow marker exceed target columns", () => {
   const truncated = truncateToColumns("abcdef", 1, { overflowMarker: "..." });
 
@@ -72,6 +87,14 @@ test("truncate never lets overflow marker exceed target columns", () => {
   strictEqual(displayWidth(truncated), 1);
 });
 
+test("truncate expands tabs from the current column", () => {
+  const truncated = truncateToColumns("abc\tz", 9, { tabSize: 8 });
+
+  strictEqual(truncated, "abc     z");
+  strictEqual(displayWidth(truncated), 9);
+});
+
 test("wrap respects column width without relying on terminal autowrap", () => {
   deepStrictEqual(wrapToColumns("abcd한글", 4), ["abcd", "한글"]);
+  deepStrictEqual(wrapToColumns("abc\tz", 8, { tabSize: 8 }), ["abc     ", "z"]);
 });
