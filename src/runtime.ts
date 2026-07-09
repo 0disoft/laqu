@@ -32,6 +32,7 @@ export function createLaqu(options: RuntimeOptions = {}): ProgressRuntime {
 }
 
 export function createProgressRuntime(options: RuntimeOptions = {}): ProgressRuntime {
+  assertRuntimeOptions(options);
   const stderr = options.statusStream ?? options.stderr ?? process.stderr;
   const env = options.env ?? process.env;
   const capability = options.streamCapability ?? detectCapability(stderr, env);
@@ -199,7 +200,7 @@ class LaquRuntime implements ProgressRuntime {
     }
     this.#dirty = true;
     if (immediate) {
-      void this.flush();
+      this.#flushInBackground();
       return;
     }
     if (this.#timer !== undefined) {
@@ -209,11 +210,17 @@ class LaquRuntime implements ProgressRuntime {
       () => {
         this.#timer = undefined;
         if (this.#dirty) {
-          void this.flush();
+          this.#flushInBackground();
         }
       },
       Math.round(1000 / defaultFlushHz),
     );
+  }
+
+  #flushInBackground(): void {
+    void this.flush().catch(() => {
+      this.#dirty = false;
+    });
   }
 
   #acceptsMutations(): boolean {
@@ -464,6 +471,78 @@ function normalizedColumns(columns: number | undefined): number {
     return columns;
   }
   return 80;
+}
+
+function assertRuntimeOptions(options: RuntimeOptions): void {
+  if (typeof options !== "object" || options === null || Array.isArray(options)) {
+    throw new TypeError("runtime options must be an object");
+  }
+  assertStreamTarget(options.stdout, "stdout");
+  assertStreamTarget(options.stderr, "stderr");
+  assertStreamTarget(options.statusStream, "statusStream");
+  assertOutputFormat(options.format);
+  assertStreamCapability(options.streamCapability);
+  assertProgressPolicy(options.progressPolicy);
+  if (
+    options.retention !== undefined &&
+    (typeof options.retention !== "object" ||
+      options.retention === null ||
+      Array.isArray(options.retention))
+  ) {
+    throw new TypeError("retention must be an object");
+  }
+}
+
+function assertStreamTarget(value: StreamTarget | undefined, name: string): void {
+  if (value === undefined) {
+    return;
+  }
+  if (!hasCallableProperty(value, "write")) {
+    throw new TypeError(`${name} must be a writable stream target`);
+  }
+}
+
+function hasCallableProperty(value: unknown, property: string): boolean {
+  return (
+    (typeof value === "object" || typeof value === "function") &&
+    value !== null &&
+    typeof Reflect.get(value, property) === "function"
+  );
+}
+
+function assertOutputFormat(format: RuntimeOptions["format"]): void {
+  if (format === undefined || format === "human" || format === "json" || format === "ndjson") {
+    return;
+  }
+  throw new TypeError("format must be one of: human, json, ndjson");
+}
+
+function assertStreamCapability(capability: RuntimeOptions["streamCapability"]): void {
+  if (
+    capability === undefined ||
+    capability === "tty" ||
+    capability === "ci" ||
+    capability === "pipe" ||
+    capability === "dumb"
+  ) {
+    return;
+  }
+  throw new TypeError("streamCapability must be one of: tty, ci, pipe, dumb");
+}
+
+function assertProgressPolicy(policy: RuntimeOptions["progressPolicy"]): void {
+  if (
+    policy === undefined ||
+    policy === "auto" ||
+    policy === "always" ||
+    policy === "never" ||
+    policy === "plain" ||
+    policy === "jsonl" ||
+    policy === "silent"
+  ) {
+    return;
+  }
+  throw new TypeError("progressPolicy must be one of: auto, always, never, plain, jsonl, silent");
 }
 
 function validatedPositiveSafeInteger(value: number, name: string): number {

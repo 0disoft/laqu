@@ -37,7 +37,7 @@ const styles = {
 
 export function compileTheme(input: ThemeInput = {}): CompiledTheme {
   const { useColor = true, ...overrides } = input;
-  const tokens: ThemeTokens = { ...defaultTokens, ...overrides };
+  const tokens = sanitizeThemeTokens({ ...defaultTokens, ...overrides });
 
   return {
     tokens,
@@ -67,4 +67,27 @@ export function renderSegments(
   segments: readonly RenderableSegment[],
 ): string {
   return segments.map((segment) => theme.format(segment)).join("");
+}
+
+function sanitizeThemeTokens(tokens: ThemeTokens): ThemeTokens {
+  return {
+    successSymbol: sanitizeToken(tokens.successSymbol, "successSymbol"),
+    failSymbol: sanitizeToken(tokens.failSymbol, "failSymbol"),
+    cancelSymbol: sanitizeToken(tokens.cancelSymbol, "cancelSymbol"),
+    runningSymbol: sanitizeToken(tokens.runningSymbol, "runningSymbol"),
+    pendingSymbol: sanitizeToken(tokens.pendingSymbol, "pendingSymbol"),
+    progressComplete: sanitizeToken(tokens.progressComplete, "progressComplete"),
+    progressIncomplete: sanitizeToken(tokens.progressIncomplete, "progressIncomplete"),
+    progressIndeterminate: sanitizeToken(tokens.progressIndeterminate, "progressIndeterminate"),
+    indent: sanitizeToken(tokens.indent, "indent"),
+    gap: sanitizeToken(tokens.gap, "gap"),
+    overflowMarker: sanitizeToken(tokens.overflowMarker, "overflowMarker"),
+  };
+}
+
+function sanitizeToken(value: unknown, name: keyof ThemeTokens): string {
+  if (typeof value !== "string") {
+    throw new TypeError(`theme.${name} must be a string`);
+  }
+  return sanitizeText(value);
 }

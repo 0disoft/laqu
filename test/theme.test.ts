@@ -23,3 +23,14 @@ test("ordinary themed text strips terminal control sequences", () => {
   const rendered = renderSegments(theme, [text("\u001b[31mred\u001b[0m\rspoof")]);
   strictEqual(rendered, "red spoof");
 });
+
+test("semantic theme tokens strip terminal control sequences", () => {
+  const theme = compileTheme({
+    overflowMarker: "\u001b]52;c;SGVsbG8=\u0007!",
+    runningSymbol: "\u001b[31mrun\u001b[0m",
+    useColor: false,
+  });
+
+  strictEqual(theme.tokens.overflowMarker, "!");
+  strictEqual(theme.tokens.runningSymbol, "run");
+});

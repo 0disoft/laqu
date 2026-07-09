@@ -201,11 +201,11 @@ bun run example:basic
 
 ## Release
 
-GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v1.0.6` for version `1.0.6`.
+GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v1.0.7` for version `1.0.7`.
 
 ```sh
-git tag -a v1.0.6 -m "v1.0.6"
-git push origin main v1.0.6
+git tag -a v1.0.7 -m "v1.0.7"
+git push origin main v1.0.7
 ```
 
 The npm package must define a Trusted Publisher connection for GitHub Actions with organization/user `0disoft`, repository `laqu`, workflow filename `release.yml`, environment name `npm`, and `npm publish` allowed. The GitHub repository must also define an `npm` environment with required reviewers and a deployment tag rule that allows only `v*.*.*` tags.
