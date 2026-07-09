@@ -68,6 +68,7 @@ export interface TaskHandle {
   succeed(message?: string): void;
   fail(error?: unknown): void;
   cancel(message?: string): void;
+  skip(message?: string): void;
   child(title: string, options?: TaskOptions): TaskHandle;
 }
 
