@@ -1,4 +1,4 @@
-import { deepStrictEqual, strictEqual } from "node:assert";
+import { deepStrictEqual, rejects, strictEqual } from "node:assert";
 import test from "node:test";
 
 import { createLaqu } from "../src/index.js";
@@ -38,6 +38,92 @@ test("scoped close called inside the callback defers final summary until the tas
 
   strictEqual(result, 9);
   strictEqual(taskEvents.at(-1)?.task.status, "succeeded");
+  deepStrictEqual(summary?.tasks, {
+    total: 1,
+    running: 0,
+    succeeded: 1,
+    failed: 0,
+    cancelled: 0,
+    skipped: 0,
+  });
+});
+
+test("scoped task failure disposes the task handle and abort listener", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({ stderr, env: {}, format: "json", streamCapability: "pipe" });
+  const controller = new AbortController();
+  const signal = controller.signal;
+  const addEventListener = signal.addEventListener.bind(signal);
+  const removeEventListener = signal.removeEventListener.bind(signal);
+  let activeAbortListeners = 0;
+
+  signal.addEventListener = ((type, listener, options) => {
+    if (type === "abort") {
+      activeAbortListeners += 1;
+    }
+    addEventListener(type, listener, options);
+  }) as AbortSignal["addEventListener"];
+  signal.removeEventListener = ((type, listener, options) => {
+    if (type === "abort") {
+      activeAbortListeners -= 1;
+    }
+    removeEventListener(type, listener, options);
+  }) as AbortSignal["removeEventListener"];
+
+  await rejects(
+    runtime.task("throws during scope", { signal }, async () => {
+      throw new Error("boom");
+    }),
+    /boom/,
+  );
+
+  strictEqual(activeAbortListeners, 0);
+  await runtime.close();
+
+  const events = JSON.parse(stderr.text()) as LaquEvent[];
+  const summary = events.find((event) => event.type === "summary");
+  const taskEvents = events.filter(
+    (event): event is LaquTaskEvent =>
+      event.type === "task" && event.task.title === "throws during scope",
+  );
+
+  strictEqual(taskEvents.at(-1)?.task.status, "failed");
+  strictEqual(taskEvents.at(-1)?.task.message, "boom");
+  deepStrictEqual(summary?.tasks, {
+    total: 1,
+    running: 0,
+    succeeded: 0,
+    failed: 1,
+    cancelled: 0,
+    skipped: 0,
+  });
+});
+
+test("scoped close still defers after the callback manually completes the task", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({ stderr, env: {}, format: "json", streamCapability: "pipe" });
+
+  const result = await runtime.task("manual complete before close", async (task) => {
+    task.succeed("done");
+    await runtime.close();
+    runtime.log("callback still owns the runtime");
+    return 12;
+  });
+
+  const events = JSON.parse(stderr.text()) as LaquEvent[];
+  const summary = events.find((event) => event.type === "summary");
+  const taskEvents = events.filter(
+    (event): event is LaquTaskEvent =>
+      event.type === "task" && event.task.title === "manual complete before close",
+  );
+
+  strictEqual(result, 12);
+  strictEqual(
+    events.some((event) => event.type === "log"),
+    true,
+  );
+  strictEqual(taskEvents.at(-1)?.task.status, "succeeded");
+  strictEqual(taskEvents.at(-1)?.task.message, "done");
   deepStrictEqual(summary?.tasks, {
     total: 1,
     running: 0,

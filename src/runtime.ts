@@ -131,6 +131,7 @@ class LaquRuntime implements ProgressRuntime {
       }
       throw error;
     } finally {
+      handle.dispose();
       this.#activeScopedTasks -= 1;
       await this.flush();
       if (this.#shouldRunDeferredScopedClose()) {
@@ -235,10 +236,8 @@ class LaquRuntime implements ProgressRuntime {
   }
 
   #shouldDeferScopedClose(): boolean {
-    const activeHandle = this.#taskCloseContext.getStore();
     return (
-      activeHandle !== undefined &&
-      this.#handles.has(activeHandle) &&
+      this.#taskCloseContext.getStore() !== undefined &&
       this.#activeScopedTasks > 0 &&
       !this.#closing &&
       !this.#closed
