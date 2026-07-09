@@ -104,6 +104,11 @@ export class TaskStore {
   }
 
   createTask(title: string, options: TaskOptions = {}, parentId?: string): string {
+    assertString(title, "title");
+    assertTaskOptions(options);
+    const parent = parentId === undefined ? undefined : this.#requireOpenParent(parentId);
+    const progress = progressFromOptions(options);
+    const weight = validatedWeight(options.weight);
     const id = `task-${this.#nextId}`;
     this.#nextId += 1;
     const now = Date.now();
@@ -112,10 +117,10 @@ export class TaskStore {
       parentId,
       title,
       status: "running",
-      progress: progressFromOptions(options),
+      progress,
       message: options.message,
       detail: options.detail,
-      weight: validatedWeight(options.weight),
+      weight,
       children: [],
       updatedAt: now,
     };
@@ -125,14 +130,7 @@ export class TaskStore {
 
     if (parentId === undefined) {
       this.#rootIds.push(id);
-    } else {
-      const parent = this.#requireNode(parentId);
-      if (isTerminalStatus(parent.status)) {
-        this.#tasks.delete(id);
-        this.#summaryCounts.total -= 1;
-        this.#summaryCounts.running -= 1;
-        throw new Error(`Cannot create child task under terminal task: ${parentId}`);
-      }
+    } else if (parent !== undefined) {
       parent.children.push(id);
       parent.updatedAt = now;
     }
@@ -184,6 +182,7 @@ export class TaskStore {
   }
 
   addLog(message: string): void {
+    assertString(message, "message");
     if (this.#maxLogs === 0) {
       this.#nextLogSequence += 1;
       return;
@@ -265,6 +264,14 @@ export class TaskStore {
       throw new Error(`Unknown task id: ${id}`);
     }
     return node;
+  }
+
+  #requireOpenParent(id: string): TaskNode {
+    const parent = this.#requireNode(id);
+    if (isTerminalStatus(parent.status)) {
+      throw new Error(`Cannot create child task under terminal task: ${id}`);
+    }
+    return parent;
   }
 
   #recordStatusTransition(id: string, previousStatus: TaskStatus, nextStatus: TaskStatus): void {
@@ -518,6 +525,36 @@ function validatedMaxRecords(value: number, name: string): number {
   return value;
 }
 
+function assertTaskOptions(options: TaskOptions): void {
+  if (typeof options !== "object" || options === null || Array.isArray(options)) {
+    throw new TypeError("task options must be an object");
+  }
+  if (options.message !== undefined) {
+    assertString(options.message, "message");
+  }
+  if (options.detail !== undefined) {
+    assertString(options.detail, "detail");
+  }
+  if (options.signal !== undefined) {
+    const signal = options.signal;
+    if (
+      typeof signal !== "object" ||
+      signal === null ||
+      typeof signal.aborted !== "boolean" ||
+      typeof signal.addEventListener !== "function" ||
+      typeof signal.removeEventListener !== "function"
+    ) {
+      throw new TypeError("signal must be an AbortSignal-compatible object");
+    }
+  }
+}
+
+function assertString(value: unknown, name: string): asserts value is string {
+  if (typeof value !== "string") {
+    throw new TypeError(`${name} must be a string`);
+  }
+}
+
 function requireSnapshot(snapshots: ReadonlyMap<string, TaskSnapshot>, id: string): TaskSnapshot {
   const snapshot = snapshots.get(id);
   if (snapshot === undefined) {
@@ -531,6 +568,7 @@ function applyUpdate(
   update: Partial<Omit<TaskNode, "id" | "parentId" | "children">>,
 ): void {
   if (update.title !== undefined) {
+    assertString(update.title, "title");
     node.title = update.title;
   }
   if (update.status !== undefined) {
@@ -540,9 +578,15 @@ function applyUpdate(
     node.progress = update.progress;
   }
   if (Object.hasOwn(update, "message")) {
+    if (update.message !== undefined) {
+      assertString(update.message, "message");
+    }
     node.message = update.message;
   }
   if (Object.hasOwn(update, "detail")) {
+    if (update.detail !== undefined) {
+      assertString(update.detail, "detail");
+    }
     node.detail = update.detail;
   }
   if (update.weight !== undefined) {
