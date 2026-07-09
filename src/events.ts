@@ -58,7 +58,7 @@ export function taskEvent(task: TaskSnapshot): LaquTaskEvent {
     schema: LAQU_EVENT_SCHEMA,
     version: LAQU_EVENT_SCHEMA_VERSION,
     type: "task",
-    createdAt: task.updatedAt,
+    createdAt: Date.now(),
     task: {
       id: task.id,
       title: task.title,
