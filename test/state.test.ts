@@ -237,6 +237,47 @@ test("task creation rejects terminal parents", () => {
   });
 });
 
+test("task creation rejects pruned terminal parents without changing summary", () => {
+  const store = new TaskStore({ maxTerminalTasks: 0 });
+  const parent = store.createTask("parent");
+  store.update(parent, { status: "succeeded" });
+  store.snapshot();
+  store.snapshot();
+
+  throws(() => store.createTask("late child", {}, parent), {
+    message: `Task id was pruned after terminal retention: ${parent}`,
+  });
+
+  const snapshot = store.snapshot();
+  strictEqual(snapshot.tasks.length, 0);
+  deepStrictEqual(snapshot.summary, {
+    total: 1,
+    running: 0,
+    succeeded: 1,
+    failed: 0,
+    cancelled: 0,
+    skipped: 0,
+  });
+});
+
+test("task store rejects non-string public text fields", () => {
+  const store = new TaskStore();
+  const id = store.createTask("valid");
+
+  throws(() => store.createTask(123 as never), {
+    name: "TypeError",
+    message: "title must be a string",
+  });
+  throws(() => store.addLog(123 as never), {
+    name: "TypeError",
+    message: "message must be a string",
+  });
+  throws(() => store.update(id, { message: 123 as never }), {
+    name: "TypeError",
+    message: "message must be a string",
+  });
+});
+
 test("task creation rejects invalid terminal task retention limits", () => {
   throws(() => new TaskStore({ maxTerminalTasks: -1 }), {
     name: "TypeError",
