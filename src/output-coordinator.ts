@@ -220,12 +220,6 @@ export class OutputCoordinator {
   }
 
   #disableOutput(): void {
-    if (this.#drainTimer !== undefined) {
-      clearTimeout(this.#drainTimer);
-      this.#drainTimer = undefined;
-    }
-    this.#waitingForDrain = false;
-    this.#drainPromise = undefined;
     this.lease.closed = true;
     this.lease.pendingFrame = undefined;
     this.lease.renderedLineCount = 0;
