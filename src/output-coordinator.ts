@@ -168,10 +168,16 @@ export class OutputCoordinator {
   }
 
   #writeRaw(chunk: string): void {
-    if (chunk.length === 0) {
+    if (chunk.length === 0 || this.lease.closed) {
       return;
     }
-    const accepted = this.target.write(chunk);
+    let accepted: boolean;
+    try {
+      accepted = this.target.write(chunk);
+    } catch {
+      this.#disableOutput();
+      return;
+    }
     if (accepted !== false) {
       return;
     }
@@ -211,6 +217,22 @@ export class OutputCoordinator {
       this.target.on?.("finish", onFinish);
       this.#drainTimer = setTimeout(() => settle(false), this.backpressureTimeoutMs);
     });
+  }
+
+  #disableOutput(): void {
+    if (this.#drainTimer !== undefined) {
+      clearTimeout(this.#drainTimer);
+      this.#drainTimer = undefined;
+    }
+    this.#waitingForDrain = false;
+    this.#drainPromise = undefined;
+    this.lease.closed = true;
+    this.lease.pendingFrame = undefined;
+    this.lease.renderedLineCount = 0;
+    this.lease.cursorHiddenByUs = 0;
+    this.lease.activeBars = 0;
+    this.lease.partialLineKnownByUs = false;
+    this.lease.lastLiveLines = [];
   }
 }
 
