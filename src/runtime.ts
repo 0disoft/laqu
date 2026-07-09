@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 import { OutputCoordinator } from "./output-coordinator.js";
 import { chooseRenderer } from "./renderer.js";
 import {
@@ -81,6 +83,9 @@ class LaquRuntime implements ProgressRuntime {
   #closed = false;
   #processLifecycle: ProcessLifecycleLease | undefined;
   readonly #handles = new Set<StoreTaskHandle>();
+  readonly #taskCloseContext = new AsyncLocalStorage<StoreTaskHandle>();
+  #activeScopedTasks = 0;
+  #closeRequestedByScopedTask = false;
 
   constructor(
     private readonly store: TaskStore,
@@ -106,9 +111,10 @@ class LaquRuntime implements ProgressRuntime {
       throw new TypeError("task callback is required");
     }
 
-    const handle = this.createTask(title, options);
+    const handle = this.#createRootHandle(title, options);
+    this.#activeScopedTasks += 1;
     try {
-      const result = await callback(handle);
+      const result = await this.#taskCloseContext.run(handle, () => callback(handle));
       if (this.#acceptsMutations()) {
         handle.succeed();
       }
@@ -125,17 +131,18 @@ class LaquRuntime implements ProgressRuntime {
       }
       throw error;
     } finally {
+      handle.dispose();
+      this.#activeScopedTasks -= 1;
       await this.flush();
+      if (this.#shouldRunDeferredScopedClose()) {
+        this.#closeRequestedByScopedTask = false;
+        await this.close();
+      }
     }
   }
 
   createTask(title: string, options: TaskOptions = {}): TaskHandle {
-    this.#assertAcceptsMutations();
-    const id = this.store.createTask(title, options);
-    const handle = this.#createHandle(id);
-    handle.bindSignal(options.signal);
-    this.markDirty(true);
-    return handle;
+    return this.#createRootHandle(title, options);
   }
 
   log(message: string): void {
@@ -152,6 +159,11 @@ class LaquRuntime implements ProgressRuntime {
   }
 
   async close(): Promise<void> {
+    if (this.#shouldDeferScopedClose()) {
+      this.#closeRequestedByScopedTask = true;
+      await this.flush();
+      return;
+    }
     this.#closePromise ??= this.#closeOnce();
     await this.#closePromise;
   }
@@ -223,6 +235,24 @@ class LaquRuntime implements ProgressRuntime {
     });
   }
 
+  #shouldDeferScopedClose(): boolean {
+    return (
+      this.#taskCloseContext.getStore() !== undefined &&
+      this.#activeScopedTasks > 0 &&
+      !this.#closing &&
+      !this.#closed
+    );
+  }
+
+  #shouldRunDeferredScopedClose(): boolean {
+    return (
+      this.#closeRequestedByScopedTask &&
+      this.#activeScopedTasks === 0 &&
+      !this.#closing &&
+      !this.#closed
+    );
+  }
+
   #acceptsMutations(): boolean {
     return !this.#closing && !this.#closed;
   }
@@ -231,6 +261,15 @@ class LaquRuntime implements ProgressRuntime {
     if (!this.#acceptsMutations()) {
       throw new Error("Laqu runtime is closing");
     }
+  }
+
+  #createRootHandle(title: string, options: TaskOptions): StoreTaskHandle {
+    this.#assertAcceptsMutations();
+    const id = this.store.createTask(title, options);
+    const handle = this.#createHandle(id);
+    handle.bindSignal(options.signal);
+    this.markDirty(true);
+    return handle;
   }
 
   #createHandle(id: string): StoreTaskHandle {
@@ -414,6 +453,16 @@ class StoreTaskHandle implements TaskHandle {
     this.assertWritable();
     this.store.update(this.id, {
       status: "cancelled",
+      ...(message === undefined ? {} : { message }),
+    });
+    this.dispose();
+    this.onChange(true);
+  }
+
+  skip(message?: string): void {
+    this.assertWritable();
+    this.store.update(this.id, {
+      status: "skipped",
       ...(message === undefined ? {} : { message }),
     });
     this.dispose();

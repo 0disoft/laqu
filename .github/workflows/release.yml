@@ -79,7 +79,7 @@ jobs:
     environment:
       name: npm
     permissions:
-      contents: write
+      contents: read
       id-token: write
 
     steps:
@@ -166,10 +166,21 @@ jobs:
           PACKAGE_FILE: ${{ steps.pack.outputs.filename }}
         run: npm publish "$PACKAGE_FILE" --provenance --access public
 
+  github-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.repository == '0disoft/laqu'
+    needs: publish
+    permissions:
+      contents: write
+
+    steps:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
             --title "${GITHUB_REF_NAME}" \
             --generate-notes

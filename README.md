@@ -46,11 +46,14 @@ build.setMessage("bundle");
 build.advance(1);
 build.succeed("done");
 
+const optional = progress.createTask("optional cache warmup");
+optional.skip("already warm");
+
 await progress.close();
 ```
 
 The API avoids ambiguous calls such as `update(42)`. Use `setCompleted(42)` for absolute progress and `advance(42)` for a delta.
-Manual tasks also honor `TaskOptions.signal`; aborting the signal marks the task cancelled with the message `aborted`.
+Manual tasks also honor `TaskOptions.signal`; aborting the signal marks the task cancelled with the message `aborted`. Use `task.skip(message)` for intentionally skipped work such as cache hits, disabled feature branches, or already up-to-date steps.
 
 After `progress.close()` starts, the runtime stops accepting new tasks, logs, and task handle updates. Create a new runtime for later progress output.
 
