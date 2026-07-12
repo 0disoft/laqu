@@ -182,7 +182,11 @@ export function wrapToColumns(
 }
 
 function normalizedTabSize(tabSize: number | undefined): number {
-  return Math.max(1, tabSize ?? 8);
+  const value = tabSize ?? 8;
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new TypeError("tabSize must be a safe positive integer");
+  }
+  return value;
 }
 
 function tabWidthAtColumn(column: number, tabSize: number): number {

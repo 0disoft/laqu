@@ -635,7 +635,7 @@ test("process lifecycle preserves non-Error rejection reasons", () => {
   const reason = { code: "CUSTOM_REJECTION" };
   const error = unknownToRejectionError(reason);
 
-  strictEqual(error.message, 'Unhandled promise rejection: {"code":"CUSTOM_REJECTION"}');
+  strictEqual(error.message, "Unhandled promise rejection: Non-Error thrown");
   strictEqual((error as Error & { readonly cause?: unknown }).cause, reason);
 });
 

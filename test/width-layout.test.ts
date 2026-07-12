@@ -1,4 +1,4 @@
-import { deepStrictEqual, strictEqual } from "node:assert";
+import { deepStrictEqual, strictEqual, throws } from "node:assert";
 import test from "node:test";
 
 import {
@@ -36,6 +36,23 @@ test("width corpus covers Korean CJK emoji combining marks and tabs", () => {
   strictEqual(displayWidth("a\uFE0F"), 1);
   strictEqual(displayWidth("a\tb", { tabSize: 2 }), 3);
   strictEqual(displayWidth("abc\tz", { tabSize: 8 }), 9);
+});
+
+test("width helpers reject invalid tab sizes consistently", () => {
+  for (const tabSize of [Number.NaN, Number.POSITIVE_INFINITY, 0, -1, 1.5]) {
+    throws(() => displayWidth("a\tb", { tabSize }), {
+      name: "TypeError",
+      message: "tabSize must be a safe positive integer",
+    });
+    throws(() => truncateToColumns("a\tb", 10, { tabSize }), {
+      name: "TypeError",
+      message: "tabSize must be a safe positive integer",
+    });
+    throws(() => wrapToColumns("a\tb", 10, { tabSize }), {
+      name: "TypeError",
+      message: "tabSize must be a safe positive integer",
+    });
+  }
 });
 
 test("ambiguous width can be overridden", () => {

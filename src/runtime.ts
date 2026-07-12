@@ -86,6 +86,8 @@ class LaquRuntime implements ProgressRuntime {
   readonly #taskCloseContext = new AsyncLocalStorage<StoreTaskHandle>();
   #activeScopedTasks = 0;
   #closeRequestedByScopedTask = false;
+  #scopedTasksDrained: Promise<void> | undefined;
+  #resolveScopedTasksDrained: (() => void) | undefined;
 
   constructor(
     private readonly store: TaskStore,
@@ -133,6 +135,11 @@ class LaquRuntime implements ProgressRuntime {
     } finally {
       handle.dispose();
       this.#activeScopedTasks -= 1;
+      if (this.#activeScopedTasks === 0) {
+        this.#resolveScopedTasksDrained?.();
+        this.#resolveScopedTasksDrained = undefined;
+        this.#scopedTasksDrained = undefined;
+      }
       await this.flush();
       if (this.#shouldRunDeferredScopedClose()) {
         this.#closeRequestedByScopedTask = false;
@@ -164,8 +171,18 @@ class LaquRuntime implements ProgressRuntime {
       await this.flush();
       return;
     }
-    this.#closePromise ??= this.#closeOnce();
+    this.#closePromise ??= this.#closeAfterScopedTasks();
     await this.#closePromise;
+  }
+
+  async #closeAfterScopedTasks(): Promise<void> {
+    if (this.#activeScopedTasks > 0) {
+      this.#scopedTasksDrained ??= new Promise<void>((resolve) => {
+        this.#resolveScopedTasksDrained = resolve;
+      });
+      await this.#scopedTasksDrained;
+    }
+    await this.#closeOnce();
   }
 
   manageProcessLifecycle(): void {
@@ -606,13 +623,19 @@ function unknownToMessage(error: unknown): string | undefined {
     return undefined;
   }
   if (error instanceof Error) {
-    return error.message;
+    try {
+      return typeof error.message === "string" ? error.message : "Error";
+    } catch {
+      return "Error";
+    }
   }
   if (typeof error === "string") {
     return error;
   }
+  if (error === null) {
+    return "Non-Error thrown";
+  }
   if (
-    error === null ||
     typeof error === "number" ||
     typeof error === "boolean" ||
     typeof error === "bigint" ||
@@ -620,11 +643,7 @@ function unknownToMessage(error: unknown): string | undefined {
   ) {
     return String(error);
   }
-  try {
-    return JSON.stringify(error) ?? String(error);
-  } catch {
-    return String(error);
-  }
+  return "Non-Error thrown";
 }
 
 export function unknownToRejectionError(reason: unknown): Error {

@@ -535,6 +535,12 @@ function assertTaskOptions(options: TaskOptions): void {
   if (options.detail !== undefined) {
     assertString(options.detail, "detail");
   }
+  if (
+    options.ratio !== undefined &&
+    (options.total !== undefined || options.completed !== undefined)
+  ) {
+    throw new TypeError("task options must not mix ratio with total or completed progress");
+  }
   if (options.signal !== undefined) {
     const signal = options.signal;
     if (

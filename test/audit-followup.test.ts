@@ -1,4 +1,4 @@
-import { deepStrictEqual, rejects, strictEqual } from "node:assert";
+import { deepStrictEqual, rejects, strictEqual, throws } from "node:assert";
 import test from "node:test";
 
 import { createLaqu } from "../src/index.js";
@@ -191,5 +191,116 @@ test("public skip API emits skipped task status and summary count", async () => 
     failed: 0,
     cancelled: 0,
     skipped: 1,
+  });
+});
+
+test("plain output preserves all tasks and long text", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({
+    stderr,
+    env: {},
+    progressPolicy: "plain",
+    streamCapability: "pipe",
+    maxRows: 2,
+  });
+  const marker = `diagnostic-${"x".repeat(120)}-critical-tail`;
+
+  runtime.log(marker);
+  for (let index = 1; index <= 3; index += 1) {
+    runtime.createTask(`task-${index}`).fail(`failure-${index}`);
+  }
+  await runtime.close();
+
+  strictEqual(stderr.text().includes(marker), true);
+  strictEqual(stderr.text().includes("task-3"), true);
+  strictEqual(stderr.text().includes("failure-3"), true);
+});
+
+test("task state keys do not collide on delimiters", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({ stderr, env: {}, format: "ndjson", streamCapability: "pipe" });
+  const task = runtime.createTask("collision", { message: "a:b", detail: "c" });
+  await runtime.flush();
+
+  task.setMessage("a");
+  task.setDetail("b:c");
+  await runtime.close();
+
+  const taskEvents = stderr
+    .text()
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as LaquEvent)
+    .filter((event): event is LaquTaskEvent => event.type === "task" && event.task.id === task.id);
+  strictEqual(taskEvents.at(-1)?.task.message, "a");
+  strictEqual(taskEvents.at(-1)?.task.detail, "b:c");
+});
+
+test("non-Error failures stay safe and terminal", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({ stderr, env: {}, format: "json", streamCapability: "pipe" });
+  const thrown = {
+    authorization: "Bearer probe-secret-value",
+    toJSON(): never {
+      throw new Error("coercion exploded");
+    },
+    [Symbol.toPrimitive](): never {
+      throw new Error("coercion exploded");
+    },
+  };
+
+  await rejects(
+    runtime.task("safe failure", async () => Promise.reject(thrown)),
+    (error) => error === thrown,
+  );
+  await runtime.close();
+
+  const events = JSON.parse(stderr.text()) as LaquEvent[];
+  const taskEvent = events
+    .filter(
+      (event): event is LaquTaskEvent =>
+        event.type === "task" && event.task.title === "safe failure",
+    )
+    .at(-1);
+  const summary = events.find((event) => event.type === "summary");
+  strictEqual(stderr.text().includes("probe-secret-value"), false);
+  strictEqual(taskEvent?.task.message, "Non-Error thrown");
+  strictEqual(taskEvent?.task.status, "failed");
+  strictEqual(summary?.tasks.running, 0);
+});
+
+test("external close waits for active scoped tasks", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({ stderr, env: {}, format: "json", streamCapability: "pipe" });
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const scoped = runtime.task("externally closed", async () => {
+    await gate;
+    return 42;
+  });
+  let closeResolved = false;
+  const closing = runtime.close().then(() => {
+    closeResolved = true;
+  });
+
+  await Promise.resolve();
+  strictEqual(closeResolved, false);
+  release();
+  strictEqual(await scoped, 42);
+  await closing;
+
+  const events = JSON.parse(stderr.text()) as LaquEvent[];
+  const summary = events.find((event) => event.type === "summary");
+  strictEqual(summary?.tasks.running, 0);
+  strictEqual(summary?.tasks.succeeded, 1);
+});
+
+test("task options reject conflicting progress", () => {
+  const runtime = createLaqu({ stderr: new FakeStream(), env: {}, progressPolicy: "silent" });
+  throws(() => runtime.createTask("conflict", { total: 10, completed: 5, ratio: 0.9 }), {
+    name: "TypeError",
+    message: "task options must not mix ratio with total or completed progress",
   });
 });

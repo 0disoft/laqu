@@ -50,7 +50,7 @@ export function chooseRenderer(options: RendererOptions): RendererDecision {
   }
   if (options.policy === "plain") {
     return {
-      renderer: new PlainLogRenderer(options.theme, options.columns, options.maxRows),
+      renderer: new PlainLogRenderer(options.theme),
       live: false,
       jsonSerialization: "none",
     };
@@ -66,7 +66,7 @@ export function chooseRenderer(options: RendererOptions): RendererDecision {
     };
   }
   return {
-    renderer: new PlainLogRenderer(options.theme, options.columns, options.maxRows),
+    renderer: new PlainLogRenderer(options.theme),
     live: false,
     jsonSerialization: "none",
   };
@@ -100,29 +100,26 @@ export class PlainLogRenderer implements Renderer {
 
   constructor(
     private readonly theme: CompiledTheme,
-    private readonly columns: number,
-    private readonly maxRows: number,
+    _columns?: number,
+    _maxRows?: number,
   ) {}
 
   render(snapshot: RuntimeSnapshot): Frame {
     const lines: string[] = [];
     const newLogs = logsAfterSequence(snapshot.logs, this.#seenLogSequence);
-    lines.push(...renderLogLines(newLogs, this.theme, this.columns));
+    lines.push(...newLogs.map((log) => sanitizeText(log.message)));
     this.#seenLogSequence = lastLogSequence(snapshot.logs, this.#seenLogSequence);
 
-    const rows = flattenTasks(snapshot.tasks).slice(0, this.maxRows);
+    const rows = flattenTasks(snapshot.tasks);
     pruneSeenTaskStates(this.#seenTaskStates, rows);
 
     for (const row of rows) {
-      const state = `${row.status}:${row.message ?? ""}:${row.detail ?? ""}:${progressText(
-        row,
-        this.theme,
-      )}`;
+      const state = taskStateKey(row);
       if (this.#seenTaskStates.get(row.id) === state) {
         continue;
       }
       this.#seenTaskStates.set(row.id, state);
-      lines.push(renderTaskRow(row, this.theme, this.columns));
+      lines.push(renderTaskRow(row, this.theme));
     }
 
     return lines.length === 0 ? { kind: "none" } : { kind: "plain", lines };
@@ -145,11 +142,7 @@ export class JsonEventRenderer implements Renderer {
     this.#seenLogSequence = lastLogSequence(snapshot.logs, this.#seenLogSequence);
 
     for (const task of tasks) {
-      const ratio = task.aggregate.kind === "ratio" ? task.aggregate.ratio : undefined;
-      const overrun = task.aggregate.kind === "ratio" ? task.aggregate.overrun : undefined;
-      const state = `${task.status}:${task.message ?? ""}:${task.detail ?? ""}:${task.aggregate.kind}:${
-        ratio ?? ""
-      }:${overrun ?? ""}`;
+      const state = taskStateKey(task);
       if (this.#seenTaskStates.get(task.id) === state) {
         continue;
       }
@@ -240,7 +233,7 @@ function pruneSeenTaskStates(
   }
 }
 
-function renderTaskRow(task: TaskSnapshot, theme: CompiledTheme, columns: number): string {
+function renderTaskRow(task: TaskSnapshot, theme: CompiledTheme, columns?: number): string {
   const symbol = statusSymbol(task, theme);
   const indent = theme.tokens.indent.repeat(task.depth);
   const progress = progressText(task, theme);
@@ -258,9 +251,14 @@ function renderTaskRow(task: TaskSnapshot, theme: CompiledTheme, columns: number
     text(progress === "" ? "" : `${theme.tokens.gap}${progress}`, "accent"),
     text(message),
   ]);
-  return truncateToColumns(`${row}${detail}`, columns, {
-    overflowMarker: theme.tokens.overflowMarker,
-  });
+  const rendered = `${row}${detail}`;
+  return columns === undefined
+    ? rendered
+    : truncateToColumns(rendered, columns, { overflowMarker: theme.tokens.overflowMarker });
+}
+
+function taskStateKey(task: TaskSnapshot): string {
+  return JSON.stringify([task.status, task.message, task.detail, task.progress, task.aggregate]);
 }
 
 function statusSymbol(task: TaskSnapshot, theme: CompiledTheme): string {
