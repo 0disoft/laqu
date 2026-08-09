@@ -27,6 +27,9 @@ This repository type owns public API surface, package compatibility, semantic ve
 - Module format: ESM
 - Runtime dependencies: none
 - Public declaration files are emitted from the TypeScript build into `dist/`.
+- Detailed compatibility policy: docs/library/compatibility.md
+- Semantic versioning policy: docs/library/semver.md
+- Upgrade and deprecation guidance: docs/library/migration-guide.md
 
 ## Validation
 

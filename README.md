@@ -2,7 +2,10 @@
 
 `laqu` is a strict TypeScript runtime for reliable terminal progress and live CLI rendering on Node.js 24+.
 
-It treats stdout as the data channel and sends progress, status, logs, human rendering, and JSON/NDJSON progress events to stderr by default. The runtime keeps output format, stream capability, channel role, and progress policy as separate decisions instead of hiding them behind one mode enum.
+It treats stdout as the caller-owned data channel and sends progress, status, logs, human rendering,
+and JSON/NDJSON progress events to stderr by default. The runtime keeps output format, status-stream
+capability, output target, and progress policy as separate decisions instead of hiding them behind
+one mode enum.
 
 ## Install
 
@@ -150,7 +153,7 @@ The selection axes are independent:
 
 - `format`: `human`, `json`, or `ndjson`
 - `streamCapability`: `tty`, `ci`, `pipe`, or `dumb`
-- channel role: stdout as data, stderr/status stream as progress
+- output target: stderr by default or an explicit `statusStream`
 - `progressPolicy`: `auto`, `always`, `never`, `plain`, `jsonl`, or `silent`
 
 ## Themes
@@ -205,11 +208,11 @@ bun run example:basic
 
 ## Release
 
-GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v1.0.8` for version `1.0.8`.
+GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v1.0.9` for version `1.0.9`.
 
 ```sh
-git tag -a v1.0.8 -m "v1.0.8"
-git push origin main v1.0.8
+git tag -a v1.0.9 -m "v1.0.9"
+git push origin main v1.0.9
 ```
 
 The npm package must define a Trusted Publisher connection for GitHub Actions with organization/user `0disoft`, repository `laqu`, workflow filename `release.yml`, environment name `npm`, and `npm publish` allowed. The GitHub repository must also define an `npm` environment with required reviewers and a deployment tag rule that allows only `v*.*.*` tags.
