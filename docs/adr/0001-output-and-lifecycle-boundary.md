@@ -17,6 +17,7 @@ pipe, and dumb-terminal environments without becoming a process supervisor.
 - Give a stream at most one live owner; concurrent runtimes fall back to append-only output.
 - Route logs and progress through one output coordinator.
 - Keep process-level signal and exception handling opt-in.
+- Keep ordinary `close()` graceful, but use bounded abortive finalization for fatal process events.
 - Bound retained records, flush frequency, and backpressure waits.
 
 ## Consequences
@@ -24,6 +25,11 @@ pipe, and dumb-terminal environments without becoming a process supervisor.
 Machine-readable caller output remains composable and non-TTY environments remain readable. Live
 rendering can degrade safely instead of competing for cursor control. Applications retain shutdown
 authority but must call `close()` unless they explicitly enable lifecycle management.
+
+The runtime lifecycle is `open → draining → finalizing → closed`. Draining admits completion work
+only from scoped task trees that were already running. Fatal events skip draining so an unfinished
+application task cannot capture `SIGINT`, `SIGTERM`, an uncaught exception, or an unhandled
+rejection indefinitely.
 
 `RuntimeOptions.stdout` documents and validates the reserved caller channel but does not redirect
 status output. `ChannelRole` names the channel vocabulary; `statusStream` is the operative routing

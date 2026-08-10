@@ -1,5 +1,7 @@
 import { deepStrictEqual, rejects, strictEqual, throws } from "node:assert";
+import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
+import { resolve } from "node:path";
 import test from "node:test";
 
 import { createLaqu } from "../src/index.js";
@@ -467,6 +469,28 @@ test("runtime rejects invalid maxRows values", () => {
   });
 });
 
+test("runtime construction failure releases live stream ownership", async () => {
+  const stderr = new FakeStream();
+  stderr.isTTY = true;
+
+  throws(
+    () =>
+      createLaqu({
+        stderr,
+        env: {},
+        streamCapability: "tty",
+        retention: { maxLogs: -1 },
+      }),
+    { message: "maxLogs must be a safe non-negative integer" },
+  );
+
+  const runtime = createLaqu({ stderr, env: {}, streamCapability: "tty" });
+  runtime.createTask("live-after-failure").succeed();
+  await runtime.close();
+
+  strictEqual(stderr.text().includes("\u001b[?25l"), true);
+});
+
 test("indeterminate leaf renders as indeterminate instead of mixed", async () => {
   const stderr = new FakeStream();
   const runtime = createLaqu({
@@ -551,6 +575,49 @@ test("runtime rejects new mutations while close is in progress", async () => {
   strictEqual(stderr.text().includes("late"), false);
 });
 
+test("close drains scoped tasks but rejects new root and manual mutations immediately", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({ stderr, env: {}, format: "json", streamCapability: "pipe" });
+  const manual = runtime.createTask("manual");
+  let releaseScoped: (() => void) | undefined;
+  let scopedStarted: (() => void) | undefined;
+  const started = new Promise<void>((resolveStarted) => {
+    scopedStarted = resolveStarted;
+  });
+  const release = new Promise<void>((resolveRelease) => {
+    releaseScoped = resolveRelease;
+  });
+  const scoped = runtime.task("scoped", async (task) => {
+    scopedStarted?.();
+    await release;
+    task.setMessage("drained");
+  });
+
+  await started;
+  const closing = runtime.close();
+
+  throws(() => runtime.createTask("late"), { message: "Laqu runtime is closing" });
+  throws(() => runtime.log("late log"), { message: "Laqu runtime is closing" });
+  throws(() => manual.advance(1), { message: "Laqu runtime is closing" });
+
+  releaseScoped?.();
+  await scoped;
+  await closing;
+
+  const events = JSON.parse(stderr.text()) as readonly {
+    readonly type?: string;
+    readonly tasks?: {
+      readonly running?: number;
+      readonly succeeded?: number;
+      readonly cancelled?: number;
+    };
+  }[];
+  const summary = events.find((event) => event.type === "summary");
+  strictEqual(summary?.tasks?.running, 0);
+  strictEqual(summary?.tasks?.succeeded, 1);
+  strictEqual(summary?.tasks?.cancelled, 1);
+});
+
 test("runtime rejects mutations after close", async () => {
   const stderr = new FakeStream();
   const runtime = createLaqu({ stderr, env: {}, streamCapability: "pipe" });
@@ -629,6 +696,56 @@ test("process lifecycle handlers are opt-in and disposed on close", async () => 
 
   await managedRuntime.close();
   deepStrictEqual(processLifecycleListenerCounts(), before);
+});
+
+test("process lifecycle signal does not wait for an unfinished scoped task", async () => {
+  const fixture = resolve(process.cwd(), "test/fixtures/signal-hang.mjs");
+  const child = spawn(process.execPath, [fixture], {
+    stdio: ["ignore", "ignore", "pipe", "ipc"],
+  });
+  let stderr = "";
+  child.stderr?.setEncoding("utf8");
+  child.stderr?.on("data", (chunk: string) => {
+    stderr += chunk;
+  });
+
+  const ready = new Promise<void>((resolveReady, rejectReady) => {
+    child.once("error", rejectReady);
+    child.on("message", (message) => {
+      if (message === "ready") {
+        resolveReady();
+      }
+    });
+  });
+  const exited = new Promise<void>((resolveExited, rejectExited) => {
+    child.once("error", rejectExited);
+    child.once("exit", () => resolveExited());
+  });
+
+  try {
+    await ready;
+    child.send("interrupt");
+    await new Promise<void>((resolveExit, rejectTimeout) => {
+      const timer = setTimeout(
+        () => rejectTimeout(new Error(`signal fixture did not exit: ${stderr}`)),
+        1_000,
+      );
+      void exited.then(
+        () => {
+          clearTimeout(timer);
+          resolveExit();
+        },
+        (error: unknown) => {
+          clearTimeout(timer);
+          rejectTimeout(error);
+        },
+      );
+    });
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill();
+    }
+  }
 });
 
 test("process lifecycle preserves non-Error rejection reasons", () => {

@@ -28,7 +28,9 @@ package documentation must preserve.
 - Manual task handles support absolute, delta, ratio, percent, indeterminate, message, detail,
   success, failure, cancellation, skip, and child-task operations.
 - Task progress rejects invalid numeric inputs and aggregates children by non-negative weight.
-- Once close begins, the runtime rejects new mutations and waits for active scoped tasks.
+- Once close begins, the runtime enters `draining`: it rejects new root tasks, caller logs, and
+  manual task mutations while allowing already-running scoped task trees to finish.
+- Finalization cancels unfinished task handles so the final summary cannot retain running work.
 
 ### Output and Rendering
 
@@ -56,6 +58,8 @@ package documentation must preserve.
 
 - Process signal and exception handlers are disabled by default and available only through
   `manageProcessLifecycle: true`.
+- Fatal process events bypass scoped-task draining, attempt terminal cleanup for at most 250
+  milliseconds, and then re-deliver the original termination cause.
 - The runtime target, module format, dependency policy, and subpath exports follow
   docs/library/compatibility.md and docs/library/public-api.md.
 - Validation before merge follows VALIDATION.md.

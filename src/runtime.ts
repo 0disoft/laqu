@@ -23,7 +23,10 @@ import type {
 } from "./types.js";
 
 const defaultFlushHz = 15;
+const fatalShutdownTimeoutMs = 250;
 const liveStreamLeases = new WeakSet<StreamTarget>();
+
+type RuntimeState = "open" | "draining" | "finalizing" | "closed";
 
 interface LiveStreamLease {
   release(): void;
@@ -50,6 +53,10 @@ export function createProgressRuntime(options: RuntimeOptions = {}): ProgressRun
     columns,
     maxRows,
   };
+  const store = new TaskStore({
+    maxLogs: options.retention?.maxLogs,
+    maxTerminalTasks: options.retention?.maxTerminalTasks,
+  });
   const initialDecision = chooseRenderer(rendererOptions);
   const liveStreamLease = initialDecision.live ? acquireLiveStreamLease(stderr) : undefined;
   const decision =
@@ -57,30 +64,31 @@ export function createProgressRuntime(options: RuntimeOptions = {}): ProgressRun
       ? chooseRenderer({ ...rendererOptions, policy: "plain" })
       : initialDecision;
 
-  const store = new TaskStore({
-    maxLogs: options.retention?.maxLogs,
-    maxTerminalTasks: options.retention?.maxTerminalTasks,
-  });
-  const coordinator = new OutputCoordinator(
-    stderr,
-    decision.renderer,
-    decision.live,
-    decision.jsonSerialization,
-  );
-  const runtime = new LaquRuntime(store, coordinator, policy, liveStreamLease);
-  if (options.manageProcessLifecycle === true) {
-    runtime.manageProcessLifecycle();
+  try {
+    const coordinator = new OutputCoordinator(
+      stderr,
+      decision.renderer,
+      decision.live,
+      decision.jsonSerialization,
+    );
+    const runtime = new LaquRuntime(store, coordinator, policy, liveStreamLease);
+    if (options.manageProcessLifecycle === true) {
+      runtime.manageProcessLifecycle();
+    }
+    return runtime;
+  } catch (error) {
+    liveStreamLease?.release();
+    throw error;
   }
-  return runtime;
 }
 
 class LaquRuntime implements ProgressRuntime {
   #timer: ReturnType<typeof setTimeout> | undefined;
   #flushPromise: Promise<void> | undefined;
-  #closePromise: Promise<void> | undefined;
+  #gracefulClosePromise: Promise<void> | undefined;
+  #finalizePromise: Promise<void> | undefined;
   #dirty = false;
-  #closing = false;
-  #closed = false;
+  #state: RuntimeState = "open";
   #processLifecycle: ProcessLifecycleLease | undefined;
   readonly #handles = new Set<StoreTaskHandle>();
   readonly #taskCloseContext = new AsyncLocalStorage<StoreTaskHandle>();
@@ -113,16 +121,16 @@ class LaquRuntime implements ProgressRuntime {
       throw new TypeError("task callback is required");
     }
 
-    const handle = this.#createRootHandle(title, options);
+    const handle = this.#createRootHandle(title, options, true);
     this.#activeScopedTasks += 1;
     try {
       const result = await this.#taskCloseContext.run(handle, () => callback(handle));
-      if (this.#acceptsMutations()) {
+      if (this.#acceptsHandleMutation(true)) {
         handle.succeed();
       }
       return result;
     } catch (error) {
-      if (this.#acceptsMutations()) {
+      if (this.#acceptsHandleMutation(true)) {
         if (options.signal?.aborted === true) {
           this.store.forceTerminalUpdate(handle.id, { status: "cancelled", message: "aborted" });
         } else {
@@ -141,19 +149,19 @@ class LaquRuntime implements ProgressRuntime {
         this.#scopedTasksDrained = undefined;
       }
       await this.flush();
-      if (this.#shouldRunDeferredScopedClose()) {
+      if (this.#closeRequestedByScopedTask && this.#activeScopedTasks === 0) {
         this.#closeRequestedByScopedTask = false;
-        await this.close();
+        await this.#gracefulClosePromise;
       }
     }
   }
 
   createTask(title: string, options: TaskOptions = {}): TaskHandle {
-    return this.#createRootHandle(title, options);
+    return this.#createRootHandle(title, options, false);
   }
 
   log(message: string): void {
-    this.#assertAcceptsMutations();
+    this.#assertLogWritable();
     this.store.addLog(message);
     this.markDirty(true);
   }
@@ -166,13 +174,15 @@ class LaquRuntime implements ProgressRuntime {
   }
 
   async close(): Promise<void> {
-    if (this.#shouldDeferScopedClose()) {
+    const calledFromScopedTask = this.#shouldDeferScopedClose();
+    this.#beginDraining();
+    this.#gracefulClosePromise ??= this.#closeAfterScopedTasks();
+    if (calledFromScopedTask) {
       this.#closeRequestedByScopedTask = true;
       await this.flush();
       return;
     }
-    this.#closePromise ??= this.#closeAfterScopedTasks();
-    await this.#closePromise;
+    await this.#gracefulClosePromise;
   }
 
   async #closeAfterScopedTasks(): Promise<void> {
@@ -182,13 +192,18 @@ class LaquRuntime implements ProgressRuntime {
       });
       await this.#scopedTasksDrained;
     }
-    await this.#closeOnce();
+    await this.#finalize();
   }
 
   manageProcessLifecycle(): void {
     this.#processLifecycle ??= new ProcessLifecycleLease(() => {
-      return this.close();
+      return this.#closeForProcessTermination();
     });
+  }
+
+  async #closeForProcessTermination(): Promise<void> {
+    this.#beginDraining();
+    await waitForSettlement(this.#finalize(), fatalShutdownTimeoutMs);
   }
 
   async #flushOnce(): Promise<void> {
@@ -200,31 +215,46 @@ class LaquRuntime implements ProgressRuntime {
       this.#dirty = false;
       this.coordinator.render(this.store.snapshot());
       await this.coordinator.flush();
-    } while (this.#dirty && !this.#closed && this.policy !== "silent" && this.policy !== "never");
+    } while (
+      this.#dirty &&
+      this.#state !== "closed" &&
+      this.policy !== "silent" &&
+      this.policy !== "never"
+    );
   }
 
-  async #closeOnce(): Promise<void> {
-    if (this.#closed) {
+  #finalize(): Promise<void> {
+    this.#finalizePromise ??= this.#finalizeOnce();
+    return this.#finalizePromise;
+  }
+
+  async #finalizeOnce(): Promise<void> {
+    if (this.#state === "closed") {
       return;
     }
-    this.#closing = true;
+    this.#state = "finalizing";
     this.#processLifecycle?.dispose();
     this.#processLifecycle = undefined;
     for (const handle of this.#handles) {
-      handle.dispose();
+      handle.forceCancel();
     }
     try {
       await this.flush();
-      this.#closed = true;
       this.coordinator.finalize(this.store.snapshot());
       await this.coordinator.close();
     } finally {
+      this.#state = "closed";
       this.liveStreamLease?.release();
     }
   }
 
   private markDirty(immediate = false): void {
-    if (this.#closing || this.#closed || this.policy === "silent" || this.policy === "never") {
+    if (
+      this.#state === "finalizing" ||
+      this.#state === "closed" ||
+      this.policy === "silent" ||
+      this.policy === "never"
+    ) {
       return;
     }
     this.#dirty = true;
@@ -256,47 +286,65 @@ class LaquRuntime implements ProgressRuntime {
     return (
       this.#taskCloseContext.getStore() !== undefined &&
       this.#activeScopedTasks > 0 &&
-      !this.#closing &&
-      !this.#closed
+      this.#state !== "finalizing" &&
+      this.#state !== "closed"
     );
   }
 
-  #shouldRunDeferredScopedClose(): boolean {
-    return (
-      this.#closeRequestedByScopedTask &&
-      this.#activeScopedTasks === 0 &&
-      !this.#closing &&
-      !this.#closed
-    );
+  #beginDraining(): void {
+    if (this.#state === "open") {
+      this.#state = "draining";
+    }
   }
 
-  #acceptsMutations(): boolean {
-    return !this.#closing && !this.#closed;
+  #acceptsHandleMutation(allowDuringDrain: boolean): boolean {
+    return this.#state === "open" || (this.#state === "draining" && allowDuringDrain);
   }
 
-  #assertAcceptsMutations(): void {
-    if (!this.#acceptsMutations()) {
+  #assertOpen(): void {
+    if (this.#state !== "open") {
       throw new Error("Laqu runtime is closing");
     }
   }
 
-  #createRootHandle(title: string, options: TaskOptions): StoreTaskHandle {
-    this.#assertAcceptsMutations();
+  #assertLogWritable(): void {
+    if (
+      this.#state === "open" ||
+      (this.#state === "draining" && this.#taskCloseContext.getStore() !== undefined)
+    ) {
+      return;
+    }
+    throw new Error("Laqu runtime is closing");
+  }
+
+  #assertHandleWritable(allowDuringDrain: boolean): void {
+    if (!this.#acceptsHandleMutation(allowDuringDrain)) {
+      throw new Error("Laqu runtime is closing");
+    }
+  }
+
+  #createRootHandle(
+    title: string,
+    options: TaskOptions,
+    allowDuringDrain: boolean,
+  ): StoreTaskHandle {
+    this.#assertOpen();
     const id = this.store.createTask(title, options);
-    const handle = this.#createHandle(id);
+    const handle = this.#createHandle(id, allowDuringDrain);
     handle.bindSignal(options.signal);
     this.markDirty(true);
     return handle;
   }
 
-  #createHandle(id: string): StoreTaskHandle {
+  #createHandle(id: string, allowDuringDrain: boolean): StoreTaskHandle {
     let handle: StoreTaskHandle;
     handle = new StoreTaskHandle(
       id,
       this.store,
       (immediate) => this.markDirty(immediate),
-      () => this.#assertAcceptsMutations(),
-      (parentId, title, options) => this.#createChildHandle(parentId, title, options),
+      () => this.#assertHandleWritable(allowDuringDrain),
+      (parentId, title, options) =>
+        this.#createChildHandle(parentId, title, options, allowDuringDrain),
       () => {
         this.#handles.delete(handle);
       },
@@ -305,10 +353,15 @@ class LaquRuntime implements ProgressRuntime {
     return handle;
   }
 
-  #createChildHandle(parentId: string, title: string, options: TaskOptions): StoreTaskHandle {
-    this.#assertAcceptsMutations();
+  #createChildHandle(
+    parentId: string,
+    title: string,
+    options: TaskOptions,
+    allowDuringDrain: boolean,
+  ): StoreTaskHandle {
+    this.#assertHandleWritable(allowDuringDrain);
     const id = this.store.createTask(title, options, parentId);
-    const handle = this.#createHandle(id);
+    const handle = this.#createHandle(id, allowDuringDrain);
     handle.bindSignal(options.signal);
     this.markDirty(true);
     return handle;
@@ -321,14 +374,22 @@ class ProcessLifecycleLease {
   readonly #onRejection: NodeJS.UnhandledRejectionListener;
 
   constructor(cleanup: () => Promise<void>) {
+    let terminationStarted = false;
+    const runCleanup = (after: () => void) => {
+      if (terminationStarted) {
+        return;
+      }
+      terminationStarted = true;
+      void cleanup().then(after, after);
+    };
     this.#onSignal = (signal) => {
-      void cleanup().finally(() => {
+      runCleanup(() => {
         process.kill(process.pid, signal);
       });
     };
     this.#onException = (error) => {
       process.exitCode = 1;
-      void cleanup().finally(() => {
+      runCleanup(() => {
         setImmediate(() => {
           throw error;
         });
@@ -336,7 +397,7 @@ class ProcessLifecycleLease {
     };
     this.#onRejection = (reason) => {
       process.exitCode = 1;
-      void cleanup().finally(() => {
+      runCleanup(() => {
         setImmediate(() => {
           throw unknownToRejectionError(reason);
         });
@@ -358,6 +419,7 @@ class ProcessLifecycleLease {
 
 class StoreTaskHandle implements TaskHandle {
   #abortCleanup: (() => void) | undefined;
+  #disposed = false;
 
   constructor(
     readonly id: string,
@@ -386,8 +448,20 @@ class StoreTaskHandle implements TaskHandle {
   }
 
   dispose(): void {
+    if (this.#disposed) {
+      return;
+    }
+    this.#disposed = true;
     this.#disposeAbortCleanup();
     this.onDispose();
+  }
+
+  forceCancel(): void {
+    if (this.#disposed) {
+      return;
+    }
+    this.store.forceTerminalUpdate(this.id, { status: "cancelled" });
+    this.dispose();
   }
 
   setTotal(total: number): void {
@@ -495,6 +569,22 @@ class StoreTaskHandle implements TaskHandle {
     this.#abortCleanup?.();
     this.#abortCleanup = undefined;
   }
+}
+
+async function waitForSettlement(promise: Promise<void>, timeoutMs: number): Promise<void> {
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(finish, timeoutMs);
+    void promise.then(finish, finish);
+  });
 }
 
 function detectCapability(stream: StreamTarget, env: RuntimeEnvironment): StreamCapability {

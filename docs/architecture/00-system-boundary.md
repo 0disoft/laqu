@@ -22,8 +22,13 @@ primitives but does not own a service, database, network protocol, or durable st
 4. A throttled flush sends a snapshot to the renderer and then to `OutputCoordinator`.
 5. The coordinator serializes writes, coalesces pending frames under backpressure, and maintains the
    live terminal lease.
-6. `close()` waits for scoped tasks, renders the final snapshot, flushes pending output, restores
-   terminal state, removes lifecycle listeners, and releases live ownership.
+6. `close()` moves through `open → draining → finalizing → closed`. Draining rejects new caller
+   work while existing scoped tasks finish; finalizing cancels remaining handles, renders the final
+   snapshot, restores terminal state, removes lifecycle listeners, and releases live ownership.
+
+Fatal signal and exception handling skips draining. It attempts finalization for a bounded 250
+milliseconds and then re-delivers the original process termination cause even when application work
+never settles.
 
 Output write failure disables further rendering rather than changing application task results.
 Scoped callback failure marks the task failed and rethrows the original value. Abort signals cancel

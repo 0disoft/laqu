@@ -21,7 +21,7 @@ Applications should always:
 
 ## Deprecated or Breaking APIs
 
-There are no documented deprecated APIs or major-version migrations at version 1.0.9. Future
+There are no documented deprecated APIs or major-version migrations at version 1.0.10. Future
 deprecations and breaking changes must be added here with old usage, replacement usage, lifecycle
 differences, and the first version containing the change.
 

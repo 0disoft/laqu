@@ -58,7 +58,10 @@ await progress.close();
 The API avoids ambiguous calls such as `update(42)`. Use `setCompleted(42)` for absolute progress and `advance(42)` for a delta.
 Manual tasks also honor `TaskOptions.signal`; aborting the signal marks the task cancelled with the message `aborted`. Use `task.skip(message)` for intentionally skipped work such as cache hits, disabled feature branches, or already up-to-date steps.
 
-After `progress.close()` starts, the runtime stops accepting new tasks, logs, and task handle updates. Create a new runtime for later progress output.
+After `progress.close()` starts, the runtime stops accepting new root tasks, caller logs, and manual
+task handle updates. Scoped task callbacks that were already running may finish their own task tree;
+unfinished manual tasks are cancelled before the final summary. Create a new runtime for later
+progress output.
 
 ## Logs
 
@@ -85,6 +88,10 @@ const progress = createLaqu({
   manageProcessLifecycle: true,
 });
 ```
+
+Fatal process events do not wait for application work to finish. The runtime cancels unfinished
+tasks, makes a best-effort terminal cleanup for up to 250 milliseconds, and then re-delivers the
+original signal or exception.
 
 ## Public Imports
 
@@ -208,11 +215,11 @@ bun run example:basic
 
 ## Release
 
-GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v1.0.9` for version `1.0.9`.
+GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v1.0.10` for version `1.0.10`.
 
 ```sh
-git tag -a v1.0.9 -m "v1.0.9"
-git push origin main v1.0.9
+git tag -a v1.0.10 -m "v1.0.10"
+git push origin main v1.0.10
 ```
 
 The npm package must define a Trusted Publisher connection for GitHub Actions with organization/user `0disoft`, repository `laqu`, workflow filename `release.yml`, environment name `npm`, and `npm publish` allowed. The GitHub repository must also define an `npm` environment with required reviewers and a deployment tag rule that allows only `v*.*.*` tags.
