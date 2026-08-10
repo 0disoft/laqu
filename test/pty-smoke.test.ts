@@ -26,7 +26,11 @@ test(
       resized: Buffer.from(encoded.resized, "base64").toString("utf8"),
     };
 
-    strictEqual(output.resized.includes("pty-res"), true);
+    strictEqual(
+      output.resized.includes("pty-res"),
+      true,
+      `resized PTY output did not include the task title prefix: ${JSON.stringify(output)}`,
+    );
     strictEqual(output.resized.includes("message-after-terminal-resize"), false);
     strictEqual(output.initial.includes("\u001b[?25l"), true);
     strictEqual(output.resized.includes("\u001b[2K"), true);
