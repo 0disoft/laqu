@@ -65,14 +65,13 @@ def main() -> None:
         close_fds=True,
         pass_fds=(phase_write_fd,),
     )
-    os.close(slave_fd)
     os.close(phase_write_fd)
 
     try:
         wait_for_phase(phase_read_fd, b"initial", 10)
         initial = read_until(master_fd, b"__LAQU_INITIAL__", 10)
 
-        set_window_size(master_fd, 2, 12)
+        set_window_size(slave_fd, 2, 12)
         os.kill(process.pid, signal.SIGWINCH)
         os.write(master_fd, b"resize\n")
         wait_for_phase(phase_read_fd, b"resized", 10)
@@ -96,6 +95,7 @@ def main() -> None:
             process.kill()
             process.wait(timeout=5)
         os.close(master_fd)
+        os.close(slave_fd)
         os.close(phase_read_fd)
 
 
