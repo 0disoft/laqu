@@ -9,6 +9,7 @@ import type {
   RuntimeSnapshot,
   TaskSnapshot,
 } from "../src/task-store.js";
+import { displayWidth } from "../src/width.js";
 
 const theme = compileTheme({ useColor: false });
 const noneProgress: ProgressState = { kind: "none" };
@@ -56,6 +57,64 @@ test("live renderer emits new logs as scrollback above the live frame", () => {
   strictEqual(second.kind, "live");
   if (second.kind === "live") {
     deepStrictEqual(second.scrollbackLines, ["second log"]);
+  }
+});
+
+test("live renderer prioritizes active tasks within the exact row budget", () => {
+  const renderer = new AnsiLiveRenderer(theme, 80, 2);
+  const doneOne = { ...task("task-1", "done-one"), status: "succeeded" as const };
+  const doneTwo = { ...task("task-2", "done-two"), status: "succeeded" as const };
+  const active = task("task-3", "active-now");
+  const frame = renderer.render(snapshot([doneOne, doneTwo, active], 1));
+
+  strictEqual(frame.kind, "live");
+  if (frame.kind === "live") {
+    strictEqual(frame.lines.length, 2);
+    strictEqual(frame.lines[0]?.includes("active-now"), true);
+    strictEqual(frame.lines[1]?.includes("2 more tasks"), true);
+    strictEqual(
+      frame.lines.some((line) => line.includes("done-one")),
+      false,
+    );
+  }
+});
+
+test("single-row live rendering keeps the highest-priority task visible", () => {
+  const renderer = new AnsiLiveRenderer(theme, 80, 1);
+  const done = { ...task("task-1", "done"), status: "succeeded" as const };
+  const active = task("task-2", "active-now");
+  const frame = renderer.render(snapshot([done, active], 1));
+
+  strictEqual(frame.kind, "live");
+  if (frame.kind === "live") {
+    strictEqual(frame.lines.length, 1);
+    strictEqual(frame.lines[0]?.includes("active-now"), true);
+  }
+});
+
+test("live renderer reads current terminal geometry for every frame", () => {
+  let columns = 40;
+  let maxRows = 3;
+  const renderer = new AnsiLiveRenderer(
+    theme,
+    () => columns,
+    () => maxRows,
+  );
+  const tasks = [task("task-1", "a-long-running-task"), task("task-2", "second-active-task")];
+
+  const wide = renderer.render(snapshot(tasks, 1));
+  columns = 12;
+  maxRows = 1;
+  const resized = renderer.render(snapshot(tasks, 2));
+
+  strictEqual(wide.kind, "live");
+  strictEqual(resized.kind, "live");
+  if (resized.kind === "live") {
+    strictEqual(resized.lines.length, 1);
+    strictEqual(
+      resized.lines.every((line) => displayWidth(line) <= 12),
+      true,
+    );
   }
 });
 

@@ -118,7 +118,7 @@ By default:
 - human live rendering is enabled only when the status stream is a TTY and the environment is not CI.
 - only one runtime owns live rendering for a stream at a time; concurrent runtimes on that same stream fall back to plain append rendering until the live owner closes.
 - CI, pipe, dumb terminal, and non-TTY output fall back to plain append rendering unless a different policy is requested.
-- plain append rendering preserves every task state transition and full sanitized log text; `maxRows` and terminal-width truncation apply only to live rendering.
+- plain append rendering preserves every task state transition and full sanitized log text; `maxRows` and terminal-width truncation apply only to live rendering. Live rendering prioritizes active tasks, never exceeds the configured or available terminal rows, and redraws from current terminal dimensions when the status stream emits `resize`.
 - JSON/NDJSON progress events do not go to stdout unless the caller explicitly passes a separate status stream that points there.
 
 ```ts
@@ -234,11 +234,11 @@ bun run example:basic
 
 ## Release
 
-GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v1.1.1` for version `1.1.1`.
+GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v1.1.2` for version `1.1.2`.
 
 ```sh
-git tag -a v1.1.1 -m "v1.1.1"
-git push origin main v1.1.1
+git tag -a v1.1.2 -m "v1.1.2"
+git push origin main v1.1.2
 ```
 
 The npm package must define a Trusted Publisher connection for GitHub Actions with organization/user `0disoft`, repository `laqu`, workflow filename `release.yml`, environment name `npm`, and `npm publish` allowed. The GitHub repository must also define an `npm` environment with required reviewers and a deployment tag rule that allows only `v*.*.*` tags.

@@ -95,7 +95,8 @@ export function truncateToColumns(
     return "";
   }
 
-  const requestedMarker = options.overflowMarker ?? "";
+  const requestedMarker =
+    displayWidth(input, options) > columns ? (options.overflowMarker ?? "") : "";
   const marker =
     displayWidth(requestedMarker, options) > columns
       ? truncateToColumns(requestedMarker, columns, { ...options, overflowMarker: "" })

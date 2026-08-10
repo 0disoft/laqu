@@ -104,6 +104,10 @@ test("truncate never lets overflow marker exceed target columns", () => {
   strictEqual(displayWidth(truncated), 1);
 });
 
+test("truncate does not reserve an overflow marker for exact-width text", () => {
+  strictEqual(truncateToColumns("abcd", 4, { overflowMarker: "…" }), "abcd");
+});
+
 test("truncate expands tabs from the current column", () => {
   const truncated = truncateToColumns("abc\tz", 9, { tabSize: 8 });
 

@@ -32,8 +32,8 @@ export interface RendererOptions {
   readonly policy: ProgressPolicy;
   readonly capability: StreamCapability;
   readonly theme: CompiledTheme;
-  readonly columns: number;
-  readonly maxRows: number;
+  readonly columns: number | (() => number);
+  readonly maxRows: number | (() => number);
 }
 
 export function chooseRenderer(options: RendererOptions): RendererDecision {
@@ -77,19 +77,21 @@ export class AnsiLiveRenderer implements Renderer {
 
   constructor(
     private readonly theme: CompiledTheme,
-    private readonly columns: number,
-    private readonly maxRows: number,
+    private readonly columns: number | (() => number),
+    private readonly maxRows: number | (() => number),
   ) {}
 
   render(snapshot: RuntimeSnapshot): Frame {
+    const columns = resolveLayoutValue(this.columns);
+    const maxRows = resolveLayoutValue(this.maxRows);
     const newLogs = logsAfterSequence(snapshot.logs, this.#seenLogSequence);
-    const scrollbackLines = renderLogLines(newLogs, this.theme, this.columns);
+    const scrollbackLines = renderLogLines(newLogs, this.theme, columns);
     this.#seenLogSequence = lastLogSequence(snapshot.logs, this.#seenLogSequence);
 
     return {
       kind: "live",
       scrollbackLines,
-      lines: rowsForSnapshot(snapshot, this.theme, this.columns, this.maxRows),
+      lines: rowsForSnapshot(snapshot, this.theme, columns, maxRows),
     };
   }
 }
@@ -193,13 +195,32 @@ function rowsForSnapshot(
   maxRows: number,
 ): string[] {
   const rows = flattenTasks(snapshot.tasks);
-  const visible = rows.slice(0, maxRows);
+  const prioritized = prioritizeActiveTasks(rows);
+  const taskBudget = rows.length > maxRows && maxRows > 1 ? maxRows - 1 : maxRows;
+  const visible = prioritized.slice(0, taskBudget);
   const output = visible.map((task) => renderTaskRow(task, theme, columns));
   const hidden = rows.length - visible.length;
-  if (hidden > 0) {
+  if (hidden > 0 && output.length < maxRows) {
     output.push(truncateToColumns(`${hidden} more tasks...`, columns, theme.tokens));
   }
   return output;
+}
+
+function prioritizeActiveTasks(tasks: readonly TaskSnapshot[]): TaskSnapshot[] {
+  const active: TaskSnapshot[] = [];
+  const terminal: TaskSnapshot[] = [];
+  for (const task of tasks) {
+    if (task.status === "pending" || task.status === "running") {
+      active.push(task);
+    } else {
+      terminal.push(task);
+    }
+  }
+  return [...active, ...terminal];
+}
+
+function resolveLayoutValue(value: number | (() => number)): number {
+  return typeof value === "function" ? value() : value;
 }
 
 function flattenTasks(tasks: readonly TaskSnapshot[]): TaskSnapshot[] {

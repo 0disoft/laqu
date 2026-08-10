@@ -43,15 +43,14 @@ export function createProgressRuntime(options: RuntimeOptions = {}): ProgressRun
   const capability = options.streamCapability ?? detectCapability(stderr, env);
   const policy = options.progressPolicy ?? "auto";
   const theme = compileTheme({ useColor: defaultUseColor(capability, env), ...options.theme });
-  const columns = normalizedColumns(stderr.columns);
-  const maxRows = validatedPositiveSafeInteger(options.maxRows ?? 12, "maxRows");
+  const configuredMaxRows = validatedPositiveSafeInteger(options.maxRows ?? 12, "maxRows");
   const rendererOptions = {
     format: options.format ?? "human",
     policy,
     capability,
     theme,
-    columns,
-    maxRows,
+    columns: () => normalizedColumns(stderr.columns),
+    maxRows: () => normalizedRows(stderr.rows, configuredMaxRows),
   };
   const store = new TaskStore({
     maxLogs: options.retention?.maxLogs,
@@ -64,6 +63,7 @@ export function createProgressRuntime(options: RuntimeOptions = {}): ProgressRun
       ? chooseRenderer({ ...rendererOptions, policy: "plain" })
       : initialDecision;
 
+  let runtime: LaquRuntime | undefined;
   try {
     const coordinator = new OutputCoordinator(
       stderr,
@@ -71,13 +71,22 @@ export function createProgressRuntime(options: RuntimeOptions = {}): ProgressRun
       decision.live,
       decision.jsonSerialization,
     );
-    const runtime = new LaquRuntime(store, coordinator, policy, liveStreamLease);
+    runtime = new LaquRuntime(
+      store,
+      coordinator,
+      policy,
+      liveStreamLease,
+      decision.live ? stderr : undefined,
+    );
     if (options.manageProcessLifecycle === true) {
       runtime.manageProcessLifecycle();
     }
     return runtime;
   } catch (error) {
-    liveStreamLease?.release();
+    runtime?.disposeInfrastructure();
+    if (runtime === undefined) {
+      liveStreamLease?.release();
+    }
     throw error;
   }
 }
@@ -90,6 +99,7 @@ class LaquRuntime implements ProgressRuntime {
   #dirty = false;
   #state: RuntimeState = "open";
   #processLifecycle: ProcessLifecycleLease | undefined;
+  #terminalResizeCleanup: (() => void) | undefined;
   readonly #handles = new Set<StoreTaskHandle>();
   readonly #taskCloseContext = new AsyncLocalStorage<StoreTaskHandle>();
   #activeScopedTasks = 0;
@@ -102,7 +112,20 @@ class LaquRuntime implements ProgressRuntime {
     private readonly coordinator: OutputCoordinator,
     private readonly policy: ProgressPolicy,
     private readonly liveStreamLease: LiveStreamLease | undefined,
-  ) {}
+    resizeTarget: StreamTarget | undefined,
+  ) {
+    if (resizeTarget !== undefined) {
+      this.#terminalResizeCleanup = subscribeToResize(resizeTarget, () => this.markDirty(true));
+    }
+  }
+
+  disposeInfrastructure(): void {
+    this.#processLifecycle?.dispose();
+    this.#processLifecycle = undefined;
+    this.#terminalResizeCleanup?.();
+    this.#terminalResizeCleanup = undefined;
+    this.liveStreamLease?.release();
+  }
 
   async task<T>(title: string, callback: (task: TaskHandle) => T | Promise<T>): Promise<Awaited<T>>;
   async task<T>(
@@ -260,7 +283,7 @@ class LaquRuntime implements ProgressRuntime {
       }
     } finally {
       this.#state = "closed";
-      this.liveStreamLease?.release();
+      this.disposeInfrastructure();
     }
   }
 
@@ -675,6 +698,13 @@ function normalizedColumns(columns: number | undefined): number {
   return 80;
 }
 
+function normalizedRows(rows: number | undefined, maxRows: number): number {
+  if (typeof rows === "number" && Number.isSafeInteger(rows) && rows > 0) {
+    return Math.min(rows, maxRows);
+  }
+  return maxRows;
+}
+
 function assertRuntimeOptions(options: RuntimeOptions): void {
   if (typeof options !== "object" || options === null || Array.isArray(options)) {
     throw new TypeError("runtime options must be an object");
@@ -809,5 +839,29 @@ function acquireLiveStreamLease(stream: StreamTarget): LiveStreamLease | undefin
       released = true;
       liveStreamLeases.delete(stream);
     },
+  };
+}
+
+interface ResizeEventTarget {
+  on(event: "resize", listener: () => void): unknown;
+  off(event: "resize", listener: () => void): unknown;
+}
+
+function subscribeToResize(stream: StreamTarget, listener: () => void): (() => void) | undefined {
+  const target = stream as unknown as Partial<ResizeEventTarget>;
+  if (typeof target.on !== "function" || typeof target.off !== "function") {
+    return undefined;
+  }
+  try {
+    target.on("resize", listener);
+  } catch {
+    return undefined;
+  }
+  return () => {
+    try {
+      target.off?.("resize", listener);
+    } catch {
+      // Resize events are an optional EventEmitter-compatible capability.
+    }
   };
 }

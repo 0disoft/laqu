@@ -43,6 +43,18 @@ class DeferredDrainStream extends EventEmitter implements StreamTarget {
   }
 }
 
+class ResizeStream extends EventEmitter implements StreamTarget {
+  readonly chunks: string[] = [];
+  isTTY = true;
+  columns = 40;
+  rows = 4;
+
+  write(chunk: string): boolean {
+    this.chunks.push(chunk);
+    return true;
+  }
+}
+
 class ManualAbortSignal {
   aborted = false;
   readonly listeners = new Set<() => void>();
@@ -688,6 +700,24 @@ test("live stream ownership is released after close", async () => {
 
   strictEqual(countOccurrences(stderr.text(), "\u001b[?25l"), 2);
   strictEqual(countOccurrences(stderr.text(), "\u001b[?25h"), 2);
+});
+
+test("live runtime redraws on resize and removes its listener on close", async () => {
+  const stderr = new ResizeStream();
+  const runtime = createLaqu({ stderr, env: {}, streamCapability: "tty", maxRows: 5 });
+  runtime.createTask("resize-aware-task", { ratio: 0.5 });
+  await runtime.flush();
+  const chunksBeforeResize = stderr.chunks.length;
+
+  strictEqual(stderr.listenerCount("resize"), 1);
+  stderr.columns = 12;
+  stderr.rows = 1;
+  stderr.emit("resize");
+  await runtime.flush();
+
+  strictEqual(stderr.chunks.length > chunksBeforeResize, true);
+  await runtime.close();
+  strictEqual(stderr.listenerCount("resize"), 0);
 });
 
 test("process lifecycle handlers are opt-in and disposed on close", async () => {
