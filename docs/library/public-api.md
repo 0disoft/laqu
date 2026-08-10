@@ -21,6 +21,9 @@ This repository type owns public API surface, package compatibility, semantic ve
 - `@0disoft/laqu/theme`
 - `@0disoft/laqu/width`
 
+The package root exports `LaquOutputError` and `LaquOutputErrorCode` so callers can distinguish
+status-output delivery failure from application task failure.
+
 ## Compatibility Contract
 
 - Runtime target: Node.js 24+

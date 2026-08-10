@@ -1,7 +1,9 @@
 import {
   createLaqu,
+  LaquOutputError,
   renderSegments,
   text,
+  type LaquOutputErrorCode,
   type ProgressRuntime,
   type RenderableSegment,
 } from "@0disoft/laqu";
@@ -34,6 +36,8 @@ const width: number = displayWidth("¡", widthOptions);
 const tokenKinds: readonly AnsiToken["kind"][] = tokenizeAnsi("\u001b[32mok\u001b[0m").map(
   (token) => token.kind,
 );
+const outputErrorCode: LaquOutputErrorCode = "LAQU_OUTPUT_BACKPRESSURE_TIMEOUT";
+const outputError = new LaquOutputError(outputErrorCode, "consumer probe");
 
 await runtime.close();
 
@@ -41,3 +45,4 @@ void event;
 void rendered;
 void width;
 void tokenKinds;
+void outputError;

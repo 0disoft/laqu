@@ -1,4 +1,4 @@
-import { strictEqual, throws } from "node:assert";
+import { rejects, strictEqual, throws } from "node:assert";
 import test from "node:test";
 
 import { createLaqu } from "../src/index.js";
@@ -108,7 +108,10 @@ test("automatic flush does not leak unhandled rejections when status writes fail
   runtime.log("write failure should not kill the process");
   await new Promise((resolve) => setTimeout(resolve, 0));
   process.off("unhandledRejection", onUnhandled);
-  await runtime.close();
+  await rejects(runtime.close(), {
+    name: "LaquOutputError",
+    code: "LAQU_OUTPUT_WRITE_FAILED",
+  });
 
   strictEqual(unhandled, undefined);
 });
@@ -122,12 +125,18 @@ test("pending drain listeners are cleaned up when replayed output write fails", 
 
   const flush = output.flush();
   stream.emit("drain");
-  await flush;
+  await rejects(flush, {
+    name: "LaquOutputError",
+    code: "LAQU_OUTPUT_WRITE_FAILED",
+  });
 
   strictEqual(stream.listenerCount("drain"), 0);
   strictEqual(stream.listenerCount("error"), 0);
   strictEqual(stream.listenerCount("close"), 0);
   strictEqual(stream.listenerCount("finish"), 0);
   strictEqual(stream.chunks.length, 2);
-  await output.close();
+  await rejects(output.close(), {
+    name: "LaquOutputError",
+    code: "LAQU_OUTPUT_WRITE_FAILED",
+  });
 });

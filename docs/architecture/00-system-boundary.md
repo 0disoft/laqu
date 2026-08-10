@@ -20,8 +20,8 @@ primitives but does not own a service, database, network protocol, or durable st
 3. Task handles mutate `TaskStore`; snapshots derive hierarchy, aggregate progress, logs, and
    summary counts.
 4. A throttled flush sends a snapshot to the renderer and then to `OutputCoordinator`.
-5. The coordinator serializes writes, coalesces pending frames under backpressure, and maintains the
-   live terminal lease.
+5. The coordinator serializes writes, queues plain and JSON frames, coalesces live screen frames,
+   enforces a bounded pending-frame budget, and maintains the live terminal lease.
 6. `close()` moves through `open → draining → finalizing → closed`. Draining rejects new caller
    work while existing scoped tasks finish; finalizing cancels remaining handles, renders the final
    snapshot, restores terminal state, removes lifecycle listeners, and releases live ownership.
@@ -30,7 +30,8 @@ Fatal signal and exception handling skips draining. It attempts finalization for
 milliseconds and then re-delivers the original process termination cause even when application work
 never settles.
 
-Output write failure disables further rendering rather than changing application task results.
+Output failure does not change application task results, but it remains sticky and rejects explicit
+`flush()` and `close()` calls so the caller cannot mistake partial output for successful delivery.
 Scoped callback failure marks the task failed and rethrows the original value. Abort signals cancel
 their task and are detached during cleanup.
 

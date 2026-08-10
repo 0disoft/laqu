@@ -132,6 +132,25 @@ const progress = createLaqu({
 
 Machine-readable progress events use a versioned schema. `format: "json"` writes one parseable JSON array when the runtime closes; `format: "ndjson"` and `progressPolicy: "jsonl"` write newline-delimited event objects as work progresses.
 
+Plain and machine-readable frames are queued in order while the status stream is backpressured.
+The queue is bounded to 4096 pending frames. A write exception, stream termination, drain timeout,
+unsupported backpressure contract, or buffer overflow becomes a sticky `LaquOutputError` returned
+by `flush()` and `close()`; output is never reported as successfully flushed after such a failure.
+Live rendering keeps only the latest screen frame while preserving queued scrollback.
+
+```ts
+import { LaquOutputError } from "@0disoft/laqu";
+
+try {
+  await progress.close();
+} catch (error) {
+  if (error instanceof LaquOutputError) {
+    console.error(error.code);
+  }
+  throw error;
+}
+```
+
 The runtime retains the newest 1000 log records and 1000 terminal task records by default so long-running commands do not keep unbounded output buffers. Set `retention.maxLogs` or `retention.maxTerminalTasks` to smaller non-negative integers when only the latest output window should be rendered or emitted. Terminal task pruning affects retained task rows and task events only after the terminal task has been snapshotted for rendering; summary events keep lifecycle counts for all tasks created by the runtime.
 Task event fields such as `parentId`, `message`, and `detail` are omitted when they are absent.
 
@@ -215,11 +234,11 @@ bun run example:basic
 
 ## Release
 
-GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v1.0.10` for version `1.0.10`.
+GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v1.1.0` for version `1.1.0`.
 
 ```sh
-git tag -a v1.0.10 -m "v1.0.10"
-git push origin main v1.0.10
+git tag -a v1.1.0 -m "v1.1.0"
+git push origin main v1.1.0
 ```
 
 The npm package must define a Trusted Publisher connection for GitHub Actions with organization/user `0disoft`, repository `laqu`, workflow filename `release.yml`, environment name `npm`, and `npm publish` allowed. The GitHub repository must also define an `npm` environment with required reviewers and a deployment tag rule that allows only `v*.*.*` tags.

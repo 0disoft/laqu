@@ -1,10 +1,14 @@
-import { createLaqu } from "@0disoft/laqu";
+import { createLaqu, LaquOutputError } from "@0disoft/laqu";
 import { LAQU_EVENT_SCHEMA_VERSION } from "@0disoft/laqu/events";
 import { compileTheme } from "@0disoft/laqu/theme";
 import { displayWidth } from "@0disoft/laqu/width";
 
 if (typeof createLaqu !== "function") {
   throw new TypeError("createLaqu export is not callable");
+}
+
+if (new LaquOutputError("LAQU_OUTPUT_WRITE_FAILED", "probe").code !== "LAQU_OUTPUT_WRITE_FAILED") {
+  throw new Error("LaquOutputError export is not functional");
 }
 
 if (LAQU_EVENT_SCHEMA_VERSION !== 1) {

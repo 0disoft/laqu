@@ -1,4 +1,5 @@
 export { createLaqu, createProgressRuntime } from "./runtime.js";
+export { LaquOutputError, type LaquOutputErrorCode } from "./output-coordinator.js";
 export {
   compileTheme,
   dangerouslyRawAnsi,

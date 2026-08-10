@@ -1,9 +1,9 @@
-import { strictEqual } from "node:assert";
+import { rejects, strictEqual } from "node:assert";
 import { EventEmitter } from "node:events";
 import test from "node:test";
 
 import { logEvent } from "../src/events.js";
-import { OutputCoordinator } from "../src/output-coordinator.js";
+import { LaquOutputError, OutputCoordinator } from "../src/output-coordinator.js";
 import type { Renderer } from "../src/renderer.js";
 import type { RuntimeSnapshot } from "../src/task-store.js";
 import type { StreamTarget } from "../src/types.js";
@@ -122,43 +122,80 @@ test("backpressure preserves burst plain frames while waiting for drain", async 
   strictEqual(output.includes("snapshot-1000"), true);
 });
 
-test("unsupported custom backpressure stream does not block flush", async () => {
+test("unsupported custom backpressure stream fails explicitly", async () => {
   const stream = new UnsupportedBackpressureStream();
   const coordinator = new OutputCoordinator(stream, renderer, false);
 
   coordinator.render(snapshot(1));
   coordinator.render(snapshot(2));
-  await coordinator.flush();
+  await rejects(coordinator.flush(), {
+    name: "LaquOutputError",
+    code: "LAQU_OUTPUT_BACKPRESSURE_UNSUPPORTED",
+  });
 
   const output = stream.chunks.join("");
   strictEqual(output.includes("snapshot-1"), true);
-  strictEqual(output.includes("snapshot-2"), true);
+  strictEqual(output.includes("snapshot-2"), false);
 });
 
-test("drain listener is not registered when cleanup is unavailable", async () => {
+test("backpressure without listener cleanup fails explicitly", async () => {
   const stream = new MissingOffBackpressureStream();
   const coordinator = new OutputCoordinator(stream, renderer, false);
 
   coordinator.render(snapshot(1));
   coordinator.render(snapshot(2));
-  await coordinator.flush();
+  await rejects(coordinator.flush(), {
+    name: "LaquOutputError",
+    code: "LAQU_OUTPUT_BACKPRESSURE_UNSUPPORTED",
+  });
 
   const output = stream.chunks.join("");
   strictEqual(output.includes("snapshot-1"), true);
-  strictEqual(output.includes("snapshot-2"), true);
+  strictEqual(output.includes("snapshot-2"), false);
 });
 
-test("backpressure timeout keeps flush from waiting forever", async () => {
+test("backpressure timeout is sticky and observable", async () => {
   const stream = new HangingBackpressureStream();
   const coordinator = new OutputCoordinator(stream, renderer, false, "none", 1);
 
   coordinator.render(snapshot(1));
   coordinator.render(snapshot(2));
-  await coordinator.flush();
+  await rejects(coordinator.flush(), {
+    name: "LaquOutputError",
+    code: "LAQU_OUTPUT_BACKPRESSURE_TIMEOUT",
+  });
+  await rejects(coordinator.close(), {
+    name: "LaquOutputError",
+    code: "LAQU_OUTPUT_BACKPRESSURE_TIMEOUT",
+  });
 
   const output = stream.chunks.join("");
   strictEqual(output.includes("snapshot-1"), true);
   strictEqual(output.includes("snapshot-2"), false);
+});
+
+test("pending output queue fails explicitly at its bound", async () => {
+  const stream = new HangingBackpressureStream();
+  const coordinator = new OutputCoordinator(stream, renderer, false, "none", 1_000, 2);
+
+  coordinator.render(snapshot(1));
+  coordinator.render(snapshot(2));
+  coordinator.render(snapshot(3));
+  coordinator.render(snapshot(4));
+
+  await rejects(coordinator.flush(), {
+    name: "LaquOutputError",
+    code: "LAQU_OUTPUT_BUFFER_OVERFLOW",
+  });
+});
+
+test("LaquOutputError exposes a stable public code and cause", () => {
+  const cause = new Error("synthetic cause");
+  const error = new LaquOutputError("LAQU_OUTPUT_WRITE_FAILED", "write failed", { cause });
+
+  strictEqual(error.name, "LaquOutputError");
+  strictEqual(error.code, "LAQU_OUTPUT_WRITE_FAILED");
+  strictEqual(error.cause, cause);
 });
 
 test("backpressure preserves pending JSON events instead of replacing them", async () => {

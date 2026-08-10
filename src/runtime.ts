@@ -238,10 +238,26 @@ class LaquRuntime implements ProgressRuntime {
     for (const handle of this.#handles) {
       handle.forceCancel();
     }
+    let outputFailure: unknown;
     try {
-      await this.flush();
-      this.coordinator.finalize(this.store.snapshot());
-      await this.coordinator.close();
+      try {
+        await this.flush();
+      } catch (error) {
+        outputFailure = error;
+      }
+      try {
+        this.coordinator.finalize(this.store.snapshot());
+      } catch (error) {
+        outputFailure ??= error;
+      }
+      try {
+        await this.coordinator.close();
+      } catch (error) {
+        outputFailure ??= error;
+      }
+      if (outputFailure !== undefined) {
+        throw outputFailure;
+      }
     } finally {
       this.#state = "closed";
       this.liveStreamLease?.release();

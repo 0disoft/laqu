@@ -21,9 +21,13 @@ Applications should always:
 
 ## Deprecated or Breaking APIs
 
-There are no documented deprecated APIs or major-version migrations at version 1.0.10. Future
+There are no documented deprecated APIs or major-version migrations at version 1.1.0. Future
 deprecations and breaking changes must be added here with old usage, replacement usage, lifecycle
 differences, and the first version containing the change.
+
+Version 1.1.0 makes output failure observable. Callers that previously ignored status-stream write
+failure should handle rejection from `flush()` and `close()`. Use `LaquOutputError.code` for stable
+classification; task callback success and status-output delivery remain separate outcomes.
 
 ## Recovery
 
