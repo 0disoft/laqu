@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   displayWidth,
+  graphemes,
   stripAnsi,
   tokenizeAnsi,
   truncateToColumns,
@@ -27,15 +28,46 @@ test("OSC hyperlink sequence is zero width", () => {
   strictEqual(stripAnsi(link), "docs");
 });
 
-test("width corpus covers Korean CJK emoji combining marks and tabs", () => {
+test("width corpus covers East Asian text and Unicode emoji presentation", () => {
   strictEqual(displayWidth("한글"), 4);
   strictEqual(displayWidth("表"), 2);
   strictEqual(displayWidth("𠀀"), 2);
   strictEqual(displayWidth("👩‍💻"), 2);
+  strictEqual(displayWidth("👍🏽"), 2);
+  strictEqual(displayWidth("🇰🇷"), 2);
+  strictEqual(displayWidth("1️⃣"), 2);
+  strictEqual(displayWidth("©"), 1);
+  strictEqual(displayWidth("©︎"), 1);
+  strictEqual(displayWidth("©️"), 2);
   strictEqual(displayWidth("e\u0301"), 1);
+  strictEqual(displayWidth("שְ"), 1);
+  strictEqual(displayWidth("\u05B0"), 0);
   strictEqual(displayWidth("a\uFE0F"), 1);
   strictEqual(displayWidth("a\tb", { tabSize: 2 }), 3);
   strictEqual(displayWidth("abc\tz", { tabSize: 8 }), 9);
+});
+
+test("width-sensitive helpers preserve grapheme and column invariants across the corpus", () => {
+  const corpus = ["©", "©️", "1️⃣", "שְ", "👩‍💻", "👍🏽", "🇰🇷", "한글", "e\u0301"];
+
+  for (const value of corpus) {
+    for (let columns = 1; columns <= 4; columns += 1) {
+      const truncated = truncateToColumns(value, columns, { overflowMarker: "…" });
+      strictEqual(
+        displayWidth(truncated) <= columns,
+        true,
+        `${JSON.stringify(value)} @ ${columns}`,
+      );
+      strictEqual(
+        wrapToColumns(value, columns).every((line) => {
+          const width = displayWidth(line);
+          return width <= columns || (graphemes(line).length === 1 && width > columns);
+        }),
+        true,
+        `${JSON.stringify(value)} wrap @ ${columns}`,
+      );
+    }
+  }
 });
 
 test("width helpers reject invalid tab sizes consistently", () => {
@@ -58,6 +90,7 @@ test("width helpers reject invalid tab sizes consistently", () => {
 test("ambiguous width can be overridden", () => {
   strictEqual(displayWidth("¡", { ambiguousWidth: 1 }), 1);
   strictEqual(displayWidth("¡", { ambiguousWidth: 2 }), 2);
+  strictEqual(displayWidth("©", { ambiguousWidth: 2 }), 1);
 });
 
 test("truncate never cuts through ANSI sequence or grapheme", () => {

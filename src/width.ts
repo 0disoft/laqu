@@ -1,3 +1,5 @@
+import { ambiguousRanges, wideRanges } from "./unicode-width-ranges.js";
+
 export interface WidthOptions {
   readonly ambiguousWidth?: 1 | 2;
   readonly tabSize?: number;
@@ -30,6 +32,18 @@ const ansiPattern = new RegExp(
 const resetSequence = "\u001b[0m";
 const unsafeControlPattern = new RegExp(String.raw`[\u0000-\u0008\u000a-\u001f\u007f-\u009f]`, "g");
 const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+const markOnlyPattern = /^\p{Mark}+$/u;
+const markPattern = /\p{Mark}/u;
+const defaultIgnorablePattern = /\p{Default_Ignorable_Code_Point}/u;
+const emojiPattern = /\p{Emoji}/u;
+const emojiPresentationPattern = /\p{Emoji_Presentation}/u;
+const extendedPictographicPattern = /\p{Extended_Pictographic}/u;
+const regionalIndicatorPattern = /^\p{Regional_Indicator}{1,2}$/u;
+const unifiedIdeographPattern = /\p{Unified_Ideograph}/u;
+const keycapPattern = /^[#*0-9]\uFE0F?\u20E3$/u;
+const textPresentationSelector = "\uFE0E";
+const emojiPresentationSelector = "\uFE0F";
+const zeroWidthJoiner = "\u200D";
 
 export function tokenizeAnsi(input: string): AnsiToken[] {
   const tokens: AnsiToken[] = [];
@@ -198,10 +212,19 @@ function clusterWidth(cluster: string, ambiguousWidth: 1 | 2): number {
   if (cluster.length === 0) {
     return 0;
   }
-  if (/^\p{Mark}+$/u.test(cluster)) {
+  if (markOnlyPattern.test(cluster)) {
     return 0;
   }
-  if (cluster.includes("\u200d") || /\p{Extended_Pictographic}/u.test(cluster)) {
+  if (keycapPattern.test(cluster) || regionalIndicatorPattern.test(cluster)) {
+    return 2;
+  }
+  const textPresentation = cluster.includes(textPresentationSelector);
+  if (
+    !textPresentation &&
+    (emojiPresentationPattern.test(cluster) ||
+      (cluster.includes(emojiPresentationSelector) && emojiPattern.test(cluster)) ||
+      (cluster.includes(zeroWidthJoiner) && extendedPictographicPattern.test(cluster)))
+  ) {
     return 2;
   }
 
@@ -214,14 +237,14 @@ function clusterWidth(cluster: string, ambiguousWidth: 1 | 2): number {
     if (codePoint === 0 || codePoint < 32 || (codePoint >= 0x7f && codePoint < 0xa0)) {
       continue;
     }
-    if (isCombining(codePoint)) {
+    if (markPattern.test(char) || defaultIgnorablePattern.test(char)) {
       continue;
     }
-    if (isFullWidth(codePoint)) {
+    if (unifiedIdeographPattern.test(char) || isInRanges(codePoint, wideRanges)) {
       width += 2;
       continue;
     }
-    if (isAmbiguous(codePoint)) {
+    if (isInRanges(codePoint, ambiguousRanges)) {
       width += ambiguousWidth;
       continue;
     }
@@ -230,42 +253,25 @@ function clusterWidth(cluster: string, ambiguousWidth: 1 | 2): number {
   return width;
 }
 
-function isCombining(codePoint: number): boolean {
-  return (
-    (codePoint >= 0x0300 && codePoint <= 0x036f) ||
-    (codePoint >= 0x1ab0 && codePoint <= 0x1aff) ||
-    (codePoint >= 0x1dc0 && codePoint <= 0x1dff) ||
-    (codePoint >= 0x20d0 && codePoint <= 0x20ff) ||
-    (codePoint >= 0xfe00 && codePoint <= 0xfe0f) ||
-    (codePoint >= 0xe0100 && codePoint <= 0xe01ef) ||
-    (codePoint >= 0xfe20 && codePoint <= 0xfe2f)
-  );
-}
-
-function isFullWidth(codePoint: number): boolean {
-  return (
-    codePoint >= 0x1100 &&
-    (codePoint <= 0x115f ||
-      codePoint === 0x2329 ||
-      codePoint === 0x232a ||
-      (codePoint >= 0x2e80 && codePoint <= 0xa4cf && codePoint !== 0x303f) ||
-      (codePoint >= 0xac00 && codePoint <= 0xd7a3) ||
-      (codePoint >= 0xf900 && codePoint <= 0xfaff) ||
-      (codePoint >= 0xfe10 && codePoint <= 0xfe19) ||
-      (codePoint >= 0xfe30 && codePoint <= 0xfe6f) ||
-      (codePoint >= 0xff00 && codePoint <= 0xff60) ||
-      (codePoint >= 0xffe0 && codePoint <= 0xffe6) ||
-      (codePoint >= 0x20000 && codePoint <= 0x3fffd))
-  );
-}
-
-function isAmbiguous(codePoint: number): boolean {
-  return (
-    (codePoint >= 0x00a1 && codePoint <= 0x00ff) ||
-    (codePoint >= 0x2010 && codePoint <= 0x2027) ||
-    (codePoint >= 0x2121 && codePoint <= 0x22ff) ||
-    (codePoint >= 0x2460 && codePoint <= 0x24ff)
-  );
+function isInRanges(codePoint: number, ranges: readonly number[]): boolean {
+  let low = 0;
+  let high = ranges.length / 2 - 1;
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    const start = ranges[middle * 2];
+    const end = ranges[middle * 2 + 1];
+    if (start === undefined || end === undefined) {
+      return false;
+    }
+    if (codePoint < start) {
+      high = middle - 1;
+    } else if (codePoint > end) {
+      low = middle + 1;
+    } else {
+      return true;
+    }
+  }
+  return false;
 }
 
 function needsSgrReset(input: string): boolean {

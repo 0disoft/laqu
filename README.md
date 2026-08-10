@@ -213,7 +213,7 @@ truncateToColumns("👩‍💻 building", 8, { overflowMarker: "..." });
 wrapToColumns("abcd한글", 4);
 ```
 
-ANSI/control sequences are tokenized as zero-width. Text is segmented by grapheme, CJK/fullwidth characters are treated as two columns, combining marks as zero columns, emoji/ZWJ clusters as two columns, and ambiguous width defaults to one column unless overridden.
+ANSI/control sequences are tokenized as zero-width. Text is segmented by grapheme; static East Asian Width ranges handle wide/fullwidth and ambiguous characters, while Node's Unicode properties distinguish marks, default emoji presentation, VS15/VS16, keycaps, flags, and ZWJ clusters. Ambiguous width defaults to one column unless overridden.
 
 ## Child Process Output
 
@@ -234,11 +234,11 @@ bun run example:basic
 
 ## Release
 
-GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v1.1.2` for version `1.1.2`.
+GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v1.1.3` for version `1.1.3`.
 
 ```sh
-git tag -a v1.1.2 -m "v1.1.2"
-git push origin main v1.1.2
+git tag -a v1.1.3 -m "v1.1.3"
+git push origin main v1.1.3
 ```
 
 The npm package must define a Trusted Publisher connection for GitHub Actions with organization/user `0disoft`, repository `laqu`, workflow filename `release.yml`, environment name `npm`, and `npm publish` allowed. The GitHub repository must also define an `npm` environment with required reviewers and a deployment tag rule that allows only `v*.*.*` tags.
