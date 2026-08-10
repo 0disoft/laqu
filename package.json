@@ -1,6 +1,6 @@
 {
   "name": "@0disoft/laqu",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "description": "Reliable terminal progress and live CLI rendering primitives for TypeScript.",
   "keywords": [
     "cli",
@@ -66,7 +66,7 @@
     "@types/node": "24.x",
     "oxfmt": "0.x",
     "oxlint": "1.x",
-    "typescript": "6.x"
+    "typescript": "7.x"
   },
   "engines": {
     "node": ">=24.0.0"

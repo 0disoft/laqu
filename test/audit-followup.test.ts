@@ -57,18 +57,24 @@ test("scoped task failure disposes the task handle and abort listener", async ()
   const removeEventListener = signal.removeEventListener.bind(signal);
   let activeAbortListeners = 0;
 
-  signal.addEventListener = ((type, listener, options) => {
+  const trackedAddEventListener: AbortSignal["addEventListener"] = (type, listener, options) => {
     if (type === "abort") {
       activeAbortListeners += 1;
     }
     addEventListener(type, listener, options);
-  }) as AbortSignal["addEventListener"];
-  signal.removeEventListener = ((type, listener, options) => {
+  };
+  const trackedRemoveEventListener: AbortSignal["removeEventListener"] = (
+    type,
+    listener,
+    options,
+  ) => {
     if (type === "abort") {
       activeAbortListeners -= 1;
     }
     removeEventListener(type, listener, options);
-  }) as AbortSignal["removeEventListener"];
+  };
+  signal.addEventListener = trackedAddEventListener;
+  signal.removeEventListener = trackedRemoveEventListener;
 
   await rejects(
     runtime.task("throws during scope", { signal }, async () => {
