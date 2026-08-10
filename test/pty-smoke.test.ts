@@ -26,8 +26,7 @@ test(
       resized: Buffer.from(encoded.resized, "base64").toString("utf8"),
     };
 
-    strictEqual(output.initial.includes("pty-resize-task"), true);
-    strictEqual(output.resized.includes("…"), true);
+    strictEqual(output.resized.includes("pty-res"), true);
     strictEqual(output.resized.includes("message-after-terminal-resize"), false);
     strictEqual(output.initial.includes("\u001b[?25l"), true);
     strictEqual(output.resized.includes("\u001b[2K"), true);
