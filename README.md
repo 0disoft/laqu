@@ -229,18 +229,19 @@ bun run example:basic
 ```
 
 `bun run check` runs strict typecheck, OXC lint, OXC format check, Node.js built-in tests, and build output generation.
-`bun run pack:check` builds the package, runs an ESM consumer fixture through package self-reference imports, and verifies the package contents with `npm pack --dry-run --json`.
+`bun run pack:check` builds a real package tarball, installs it into a new temporary project without registry access or lifecycle scripts, executes ESM imports, and compiles a strict TypeScript consumer with dependency declaration checks enabled.
+CI runs both checks on Ubuntu, Windows, and macOS. The real PTY resize harness runs on Unix hosts; Windows runs the full stream, process-signal, renderer, and package suite without claiming ConPTY coverage.
 `bun run example:basic` builds the package and runs a small live progress demo. Terminal scrollback keeps the final frame; watch the command while it runs to see the bar animate in place.
 
 ## Release
 
-GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v1.1.3` for version `1.1.3`.
+GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v1.1.4` for version `1.1.4`.
 
 ```sh
-git tag -a v1.1.3 -m "v1.1.3"
-git push origin main v1.1.3
+git tag -a v1.1.4 -m "v1.1.4"
+git push origin main v1.1.4
 ```
 
 The npm package must define a Trusted Publisher connection for GitHub Actions with organization/user `0disoft`, repository `laqu`, workflow filename `release.yml`, environment name `npm`, and `npm publish` allowed. The GitHub repository must also define an `npm` environment with required reviewers and a deployment tag rule that allows only `v*.*.*` tags.
 
-On a matching tag push, the workflow first verifies the tag, package metadata, tests, build, and dry pack output with read-only repository permissions. The publish job then waits on the `npm` environment gate, repeats package verification on the tagged commit, packs the release tarball, uploads that exact tarball as a retained workflow artifact, publishes the same tarball to npm with provenance through OIDC, and creates a GitHub Release with generated notes.
+On a matching tag push, the workflow first verifies the tag, package metadata, tests, build, and installed-tarball consumer checks with read-only repository permissions. The publish job then waits on the `npm` environment gate, repeats package verification on the tagged commit, packs the release tarball, uploads that exact tarball as a retained workflow artifact, publishes the same tarball to npm with provenance through OIDC, and creates a GitHub Release with generated notes.

@@ -1,6 +1,6 @@
 {
   "name": "@0disoft/laqu",
-  "version": "1.1.3",
+  "version": "1.1.4",
   "description": "Reliable terminal progress and live CLI rendering primitives for TypeScript.",
   "keywords": [
     "cli",
@@ -58,15 +58,15 @@
     "format:check": "oxfmt --check .",
     "lint": "oxlint src test",
     "test": "bun run build:test && node --test \"dist-test/test/**/*.test.js\"",
-    "pack:check": "bun run build && node test/fixtures/consumer-esm.mjs && tsc -p test/fixtures/consumer-ts/tsconfig.json --noEmit && npm pack --dry-run --json",
+    "pack:check": "bun run build && node test/fixtures/package-consumer.mjs",
     "build:test": "tsc -p tsconfig.test.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
-    "@types/node": "24.10.1",
-    "oxfmt": "0.57.0",
-    "oxlint": "1.72.0",
-    "typescript": "6.0.3"
+    "@types/node": "24.x",
+    "oxfmt": "0.x",
+    "oxlint": "1.x",
+    "typescript": "6.x"
   },
   "engines": {
     "node": ">=24.0.0"
