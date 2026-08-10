@@ -66,17 +66,22 @@ interface TaskNode {
   message: string | undefined;
   detail: string | undefined;
   weight: number;
-  children: string[];
+  children: Set<string>;
   updatedAt: number;
+  snapshottedTerminal: boolean;
+  pruneCandidateQueued: boolean;
 }
+
+type TaskNodeUpdate = Partial<
+  Pick<TaskNode, "title" | "status" | "progress" | "message" | "detail" | "weight">
+>;
 
 export class TaskStore {
   readonly #tasks = new Map<string, TaskNode>();
-  readonly #rootIds: string[] = [];
+  readonly #rootIds = new Set<string>();
   readonly #logs: LogRecord[] = [];
-  readonly #prunedTerminalIds = new Set<string>();
-  readonly #snapshottedTerminalIds = new Set<string>();
-  readonly #terminalOrder: string[] = [];
+  readonly #pendingTerminalSnapshots: string[] = [];
+  readonly #pruneCandidates: string[] = [];
   readonly #maxLogs: number;
   readonly #maxTerminalTasks: number;
   readonly #summaryCounts = {
@@ -89,6 +94,8 @@ export class TaskStore {
   };
   #nextId = 1;
   #nextLogSequence = 1;
+  #retainedTerminalTasks = 0;
+  #pruneCandidateHead = 0;
 
   constructor(
     options: {
@@ -121,28 +128,27 @@ export class TaskStore {
       message: options.message,
       detail: options.detail,
       weight,
-      children: [],
+      children: new Set(),
       updatedAt: now,
+      snapshottedTerminal: false,
+      pruneCandidateQueued: false,
     };
     this.#tasks.set(id, node);
     this.#summaryCounts.total += 1;
     this.#summaryCounts.running += 1;
 
     if (parentId === undefined) {
-      this.#rootIds.push(id);
+      this.#rootIds.add(id);
     } else if (parent !== undefined) {
-      parent.children.push(id);
+      parent.children.add(id);
       parent.updatedAt = now;
     }
 
     return id;
   }
 
-  update(id: string, update: Partial<Omit<TaskNode, "id" | "parentId" | "children">>): void {
+  update(id: string, update: TaskNodeUpdate): void {
     const node = this.#tasks.get(id);
-    if (node === undefined && this.#prunedTerminalIds.has(id)) {
-      return;
-    }
     if (node === undefined) {
       throw new Error(`Unknown task id: ${id}`);
     }
@@ -154,14 +160,8 @@ export class TaskStore {
     this.#recordStatusTransition(node.id, previousStatus, node.status);
   }
 
-  forceTerminalUpdate(
-    id: string,
-    update: Pick<Partial<Omit<TaskNode, "id" | "parentId" | "children">>, "status" | "message">,
-  ): void {
+  forceTerminalUpdate(id: string, update: Pick<TaskNodeUpdate, "status" | "message">): void {
     const node = this.#tasks.get(id);
-    if (node === undefined && this.#prunedTerminalIds.has(id)) {
-      return;
-    }
     if (node === undefined) {
       throw new Error(`Unknown task id: ${id}`);
     }
@@ -172,9 +172,6 @@ export class TaskStore {
 
   getProgress(id: string): ProgressState {
     const node = this.#tasks.get(id);
-    if (node === undefined && this.#prunedTerminalIds.has(id)) {
-      return { kind: "none" };
-    }
     if (node === undefined) {
       throw new Error(`Unknown task id: ${id}`);
     }
@@ -203,16 +200,31 @@ export class TaskStore {
       createdAt: Date.now(),
     };
     this.#pruneTerminalTasks();
-    rememberTerminalTasks(snapshot.tasks, this.#snapshottedTerminalIds);
+    this.#markTerminalTasksSnapshotted();
     return snapshot;
+  }
+
+  retentionStats(): {
+    readonly retainedTasks: number;
+    readonly retainedTerminalTasks: number;
+    readonly pendingTerminalSnapshots: number;
+    readonly pendingPruneCandidates: number;
+  } {
+    return {
+      retainedTasks: this.#tasks.size,
+      retainedTerminalTasks: this.#retainedTerminalTasks,
+      pendingTerminalSnapshots: this.#pendingTerminalSnapshots.length,
+      pendingPruneCandidates: this.#pruneCandidates.length - this.#pruneCandidateHead,
+    };
   }
 
   #snapshotTasks(): readonly TaskSnapshot[] {
     const snapshots = new Map<string, TaskSnapshot>();
     const stack: { readonly id: string; readonly depth: number; readonly visited: boolean }[] = [];
+    const rootIds = [...this.#rootIds];
 
-    for (let index = this.#rootIds.length - 1; index >= 0; index -= 1) {
-      const id = this.#rootIds[index];
+    for (let index = rootIds.length - 1; index >= 0; index -= 1) {
+      const id = rootIds[index];
       if (id !== undefined) {
         stack.push({ id, depth: 0, visited: false });
       }
@@ -226,8 +238,9 @@ export class TaskStore {
       const node = this.#requireNode(item.id);
       if (!item.visited) {
         stack.push({ id: item.id, depth: item.depth, visited: true });
-        for (let index = node.children.length - 1; index >= 0; index -= 1) {
-          const childId = node.children[index];
+        const childIds = [...node.children];
+        for (let index = childIds.length - 1; index >= 0; index -= 1) {
+          const childId = childIds[index];
           if (childId !== undefined) {
             stack.push({ id: childId, depth: item.depth + 1, visited: false });
           }
@@ -235,7 +248,7 @@ export class TaskStore {
         continue;
       }
 
-      const children = node.children.map((childId) => requireSnapshot(snapshots, childId));
+      const children = [...node.children].map((childId) => requireSnapshot(snapshots, childId));
       snapshots.set(node.id, {
         id: node.id,
         parentId: node.parentId,
@@ -252,15 +265,12 @@ export class TaskStore {
       });
     }
 
-    return this.#rootIds.map((id) => requireSnapshot(snapshots, id));
+    return rootIds.map((id) => requireSnapshot(snapshots, id));
   }
 
   #requireNode(id: string): TaskNode {
     const node = this.#tasks.get(id);
     if (node === undefined) {
-      if (this.#prunedTerminalIds.has(id)) {
-        throw new Error(`Task id was pruned after terminal retention: ${id}`);
-      }
       throw new Error(`Unknown task id: ${id}`);
     }
     return node;
@@ -281,60 +291,82 @@ export class TaskStore {
     decrementSummaryStatus(this.#summaryCounts, previousStatus);
     incrementSummaryStatus(this.#summaryCounts, nextStatus);
     if (!isTerminalStatus(previousStatus) && isTerminalStatus(nextStatus)) {
-      this.#terminalOrder.push(id);
+      this.#retainedTerminalTasks += 1;
+      this.#pendingTerminalSnapshots.push(id);
     }
   }
 
   #pruneTerminalTasks(): void {
-    let retainedTerminalTasks = this.#countRetainedTerminalTasks();
-    while (retainedTerminalTasks > this.#maxTerminalTasks) {
-      const orderIndex = this.#terminalOrder.findIndex((id) => {
-        const node = this.#tasks.get(id);
-        return (
-          node === undefined ||
-          (this.#snapshottedTerminalIds.has(id) &&
-            isTerminalStatus(node.status) &&
-            node.children.length === 0)
-        );
-      });
-      if (orderIndex === -1) {
-        return;
-      }
-      const id = this.#terminalOrder.splice(orderIndex, 1)[0];
+    while (this.#retainedTerminalTasks > this.#maxTerminalTasks) {
+      const id = this.#pruneCandidates[this.#pruneCandidateHead];
       if (id === undefined) {
-        return;
+        break;
       }
+      this.#pruneCandidateHead += 1;
       const node = this.#tasks.get(id);
-      if (node === undefined || !isTerminalStatus(node.status) || node.children.length > 0) {
+      if (node === undefined) {
+        continue;
+      }
+      node.pruneCandidateQueued = false;
+      if (!node.snapshottedTerminal || !isTerminalStatus(node.status) || node.children.size > 0) {
         continue;
       }
       this.#removeTaskNode(node);
-      retainedTerminalTasks -= 1;
     }
+    this.#compactPruneCandidates();
   }
 
-  #countRetainedTerminalTasks(): number {
-    let count = 0;
-    for (const node of this.#tasks.values()) {
-      if (isTerminalStatus(node.status)) {
-        count += 1;
+  #markTerminalTasksSnapshotted(): void {
+    for (const id of this.#pendingTerminalSnapshots) {
+      const node = this.#tasks.get(id);
+      if (node !== undefined && isTerminalStatus(node.status)) {
+        node.snapshottedTerminal = true;
+        this.#enqueuePruneCandidate(node);
       }
     }
-    return count;
+    this.#pendingTerminalSnapshots.length = 0;
+  }
+
+  #enqueuePruneCandidate(node: TaskNode): void {
+    if (
+      node.pruneCandidateQueued ||
+      !node.snapshottedTerminal ||
+      !isTerminalStatus(node.status) ||
+      node.children.size > 0
+    ) {
+      return;
+    }
+    node.pruneCandidateQueued = true;
+    this.#pruneCandidates.push(node.id);
   }
 
   #removeTaskNode(node: TaskNode): void {
     this.#tasks.delete(node.id);
-    this.#prunedTerminalIds.add(node.id);
-    this.#snapshottedTerminalIds.delete(node.id);
+    this.#retainedTerminalTasks -= 1;
     if (node.parentId === undefined) {
-      removeArrayItem(this.#rootIds, node.id);
+      this.#rootIds.delete(node.id);
       return;
     }
     const parent = this.#tasks.get(node.parentId);
     if (parent !== undefined) {
-      removeArrayItem(parent.children, node.id);
+      parent.children.delete(node.id);
       parent.updatedAt = Date.now();
+      this.#enqueuePruneCandidate(parent);
+    }
+  }
+
+  #compactPruneCandidates(): void {
+    if (this.#pruneCandidateHead === this.#pruneCandidates.length) {
+      this.#pruneCandidates.length = 0;
+      this.#pruneCandidateHead = 0;
+      return;
+    }
+    if (
+      this.#pruneCandidateHead >= 1_024 &&
+      this.#pruneCandidateHead * 2 >= this.#pruneCandidates.length
+    ) {
+      this.#pruneCandidates.splice(0, this.#pruneCandidateHead);
+      this.#pruneCandidateHead = 0;
     }
   }
 }
@@ -569,10 +601,7 @@ function requireSnapshot(snapshots: ReadonlyMap<string, TaskSnapshot>, id: strin
   return snapshot;
 }
 
-function applyUpdate(
-  node: TaskNode,
-  update: Partial<Omit<TaskNode, "id" | "parentId" | "children">>,
-): void {
+function applyUpdate(node: TaskNode, update: TaskNodeUpdate): void {
   if (update.title !== undefined) {
     assertString(update.title, "title");
     node.title = update.title;
@@ -609,30 +638,4 @@ function assertFiniteNonNegative(value: number, name: string): void {
 
 function clamp01(value: number): number {
   return Math.min(1, Math.max(0, value));
-}
-
-function removeArrayItem(items: string[], item: string): void {
-  const index = items.indexOf(item);
-  if (index !== -1) {
-    items.splice(index, 1);
-  }
-}
-
-function rememberTerminalTasks(tasks: readonly TaskSnapshot[], seenTerminalIds: Set<string>): void {
-  const stack = [...tasks].reverse();
-  while (stack.length > 0) {
-    const task = stack.pop();
-    if (task === undefined) {
-      continue;
-    }
-    if (isTerminalStatus(task.status)) {
-      seenTerminalIds.add(task.id);
-    }
-    for (let index = task.children.length - 1; index >= 0; index -= 1) {
-      const child = task.children[index];
-      if (child !== undefined) {
-        stack.push(child);
-      }
-    }
-  }
 }

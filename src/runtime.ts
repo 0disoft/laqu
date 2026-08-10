@@ -481,7 +481,9 @@ class StoreTaskHandle implements TaskHandle {
   }
 
   setTotal(total: number): void {
-    this.assertWritable();
+    if (!this.#canMutate()) {
+      return;
+    }
     this.store.update(this.id, {
       progress: setTotalProgress(total, currentProgressValue(this.store.getProgress(this.id))),
     });
@@ -489,7 +491,9 @@ class StoreTaskHandle implements TaskHandle {
   }
 
   setCompleted(completed: number): void {
-    this.assertWritable();
+    if (!this.#canMutate()) {
+      return;
+    }
     this.store.update(this.id, {
       progress: setCompletedProgress(completed, this.store.getProgress(this.id)),
     });
@@ -497,7 +501,9 @@ class StoreTaskHandle implements TaskHandle {
   }
 
   advance(delta: number): void {
-    this.assertWritable();
+    if (!this.#canMutate()) {
+      return;
+    }
     this.store.update(this.id, {
       progress: advanceProgress(delta, this.store.getProgress(this.id)),
     });
@@ -505,7 +511,9 @@ class StoreTaskHandle implements TaskHandle {
   }
 
   setRatio(ratio: number): void {
-    this.assertWritable();
+    if (!this.#canMutate()) {
+      return;
+    }
     this.store.update(this.id, { progress: ratioProgress(ratio) });
     this.onChange(false);
   }
@@ -515,7 +523,9 @@ class StoreTaskHandle implements TaskHandle {
   }
 
   setIndeterminate(message?: string): void {
-    this.assertWritable();
+    if (!this.#canMutate()) {
+      return;
+    }
     this.store.update(this.id, {
       progress: { kind: "indeterminate" },
       ...(message === undefined ? {} : { message }),
@@ -524,19 +534,25 @@ class StoreTaskHandle implements TaskHandle {
   }
 
   setMessage(message: string): void {
-    this.assertWritable();
+    if (!this.#canMutate()) {
+      return;
+    }
     this.store.update(this.id, { message });
     this.onChange(false);
   }
 
   setDetail(detail: string): void {
-    this.assertWritable();
+    if (!this.#canMutate()) {
+      return;
+    }
     this.store.update(this.id, { detail });
     this.onChange(false);
   }
 
   succeed(message?: string): void {
-    this.assertWritable();
+    if (!this.#canMutate()) {
+      return;
+    }
     this.store.update(this.id, {
       status: "succeeded",
       ...(message === undefined ? {} : { message }),
@@ -546,7 +562,9 @@ class StoreTaskHandle implements TaskHandle {
   }
 
   fail(error?: unknown): void {
-    this.assertWritable();
+    if (!this.#canMutate()) {
+      return;
+    }
     const message = unknownToMessage(error);
     this.store.update(this.id, {
       status: "failed",
@@ -557,7 +575,9 @@ class StoreTaskHandle implements TaskHandle {
   }
 
   cancel(message?: string): void {
-    this.assertWritable();
+    if (!this.#canMutate()) {
+      return;
+    }
     this.store.update(this.id, {
       status: "cancelled",
       ...(message === undefined ? {} : { message }),
@@ -567,7 +587,9 @@ class StoreTaskHandle implements TaskHandle {
   }
 
   skip(message?: string): void {
-    this.assertWritable();
+    if (!this.#canMutate()) {
+      return;
+    }
     this.store.update(this.id, {
       status: "skipped",
       ...(message === undefined ? {} : { message }),
@@ -578,7 +600,15 @@ class StoreTaskHandle implements TaskHandle {
 
   child(title: string, options: TaskOptions = {}): TaskHandle {
     this.assertWritable();
+    if (this.#disposed) {
+      throw new Error(`Cannot create child task under terminal task: ${this.id}`);
+    }
     return this.createChildHandle(this.id, title, options);
+  }
+
+  #canMutate(): boolean {
+    this.assertWritable();
+    return !this.#disposed;
   }
 
   #disposeAbortCleanup(): void {

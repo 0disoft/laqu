@@ -557,6 +557,25 @@ test("runtime terminal task retention keeps summary counts for pruned tasks", as
   strictEqual(summary?.tasks?.failed, 0);
 });
 
+test("completed task handles do not depend on retained store tombstones", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({
+    stderr,
+    env: {},
+    streamCapability: "pipe",
+    retention: { maxTerminalTasks: 0 },
+  });
+  const task = runtime.createTask("short-lived");
+
+  task.succeed("done");
+  await runtime.flush();
+  await runtime.flush();
+  task.setMessage("late mutation");
+  await runtime.close();
+
+  strictEqual(stderr.text().includes("late mutation"), false);
+});
+
 test("runtime rejects new mutations while close is in progress", async () => {
   const stderr = new DeferredDrainStream();
   const runtime = createLaqu({ stderr, env: {}, streamCapability: "pipe" });

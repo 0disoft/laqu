@@ -216,7 +216,27 @@ test("zero terminal task retention prunes after the retained task is resnapshott
     cancelled: 0,
     skipped: 0,
   });
-  store.update(id, { status: "failed" });
+  throws(() => store.update(id, { status: "failed" }), {
+    message: `Unknown task id: ${id}`,
+  });
+});
+
+test("terminal retention releases per-task bookkeeping over repeated lifecycles", () => {
+  const store = new TaskStore({ maxTerminalTasks: 0 });
+
+  for (let index = 0; index < 5_000; index += 1) {
+    const id = store.createTask(`short-lived-${index}`);
+    store.update(id, { status: "succeeded" });
+    store.snapshot();
+    store.snapshot();
+  }
+
+  deepStrictEqual(store.retentionStats(), {
+    retainedTasks: 0,
+    retainedTerminalTasks: 0,
+    pendingTerminalSnapshots: 0,
+    pendingPruneCandidates: 0,
+  });
 });
 
 test("task creation rejects terminal parents", () => {
@@ -245,7 +265,7 @@ test("task creation rejects pruned terminal parents without changing summary", (
   store.snapshot();
 
   throws(() => store.createTask("late child", {}, parent), {
-    message: `Task id was pruned after terminal retention: ${parent}`,
+    message: `Unknown task id: ${parent}`,
   });
 
   const snapshot = store.snapshot();
