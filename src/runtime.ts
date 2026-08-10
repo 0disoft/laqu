@@ -193,10 +193,17 @@ class LaquRuntime implements ProgressRuntime {
   }
 
   async flush(): Promise<void> {
-    this.#flushPromise ??= this.#flushOnce().finally(() => {
-      this.#flushPromise = undefined;
-    });
-    await this.#flushPromise;
+    do {
+      this.#flushPromise ??= this.#flushOnce().finally(() => {
+        this.#flushPromise = undefined;
+      });
+      await this.#flushPromise;
+    } while (
+      this.#dirty &&
+      this.#state !== "closed" &&
+      this.policy !== "silent" &&
+      this.policy !== "never"
+    );
   }
 
   async close(): Promise<void> {
