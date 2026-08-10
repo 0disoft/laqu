@@ -19,6 +19,10 @@ await runtime.flush();
 process.stderr.write("\n__LAQU_INITIAL__\n");
 writeSync(phaseFd, "initial\n");
 
+process.stderr.once("resize", () => {
+  writeSync(phaseFd, "terminal-resized\n");
+});
+
 const input = createInterface({ input: process.stdin, terminal: false });
 let resized = false;
 for await (const line of input) {

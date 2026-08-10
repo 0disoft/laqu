@@ -73,6 +73,7 @@ def main() -> None:
 
         set_window_size(slave_fd, 2, 12)
         os.kill(process.pid, signal.SIGWINCH)
+        wait_for_phase(phase_read_fd, b"terminal-resized", 10)
         os.write(master_fd, b"resize\n")
         wait_for_phase(phase_read_fd, b"resized", 10)
         resized = read_until(master_fd, b"__LAQU_RESIZED__", 10)
