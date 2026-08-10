@@ -1,6 +1,7 @@
 import type { Frame, JsonSerialization, Renderer } from "./renderer.js";
 import type { RuntimeSnapshot } from "./task-store.js";
 import type { StreamTarget } from "./types.js";
+import { displayWidth } from "./width.js";
 
 type JsonEvents = Extract<Frame, { readonly kind: "json" }>["events"];
 
@@ -85,6 +86,18 @@ export class OutputCoordinator {
       return;
     }
     this.writeFrame(this.renderer.finalize?.(snapshot) ?? { kind: "none" });
+  }
+
+  invalidateLiveLayout(columns: number): void {
+    if (!this.live || this.lease.closed || !Number.isSafeInteger(columns) || columns <= 0) {
+      return;
+    }
+    let physicalRows = 0;
+    for (const line of this.lease.lastLiveLines) {
+      physicalRows += Math.max(1, Math.ceil(displayWidth(line) / columns));
+    }
+    this.lease.renderedLineCount = physicalRows;
+    this.lease.lastLiveLines = [];
   }
 
   async flush(): Promise<void> {

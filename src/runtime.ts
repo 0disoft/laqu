@@ -115,7 +115,10 @@ class LaquRuntime implements ProgressRuntime {
     resizeTarget: StreamTarget | undefined,
   ) {
     if (resizeTarget !== undefined) {
-      this.#terminalResizeCleanup = subscribeToResize(resizeTarget, () => this.markDirty(true));
+      this.#terminalResizeCleanup = subscribeToResize(resizeTarget, () => {
+        this.coordinator.invalidateLiveLayout(normalizedColumns(resizeTarget.columns));
+        this.markDirty(true);
+      });
     }
   }
 

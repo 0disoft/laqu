@@ -68,6 +68,30 @@ test("identical live frame is not written twice", async () => {
   strictEqual(writesAfterFirstRender, 1);
 });
 
+test("resize invalidation erases every reflowed physical row", async () => {
+  const stream = new FakeStream();
+  let lines: readonly string[] = ["1234567890"];
+  const coordinator = new OutputCoordinator(
+    stream,
+    {
+      render() {
+        return { kind: "live", scrollbackLines: [], lines };
+      },
+    },
+    true,
+  );
+  coordinator.render(snapshot(1));
+  const chunksBeforeResize = stream.chunks.length;
+
+  coordinator.invalidateLiveLayout(4);
+  lines = ["next"];
+  coordinator.render(snapshot(2));
+  await coordinator.close();
+
+  const redraw = stream.chunks.slice(chunksBeforeResize).join("");
+  strictEqual(redraw.split("\u001b[1A").length - 1, 2);
+});
+
 function snapshot(createdAt: number): RuntimeSnapshot {
   return {
     tasks: [],
