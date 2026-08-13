@@ -40,6 +40,9 @@ should call `close()` from their own shutdown path.
 - `check` covers type checking, lint, format, tests, and build.
 - `pack-check` covers package self-reference, TypeScript consumer declarations, and packed files.
 - CI runs on the supported Node.js major and installs the locked development toolchain.
+- CI also runs the full package and packed-consumer checks on Node.js 22 under Ubuntu as a blocking
+  compatibility candidate. This job is evidence for a future minimum-version decision; it does not
+  change the published `engines.node` contract by itself.
 
 External terminals and downstream frameworks are not exhaustively certified. Compatibility claims
 beyond the fixtures and CI matrix require additional consumer evidence.

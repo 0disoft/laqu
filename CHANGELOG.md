@@ -20,6 +20,8 @@ Notable user-facing changes to `@0disoft/laqu` are recorded here. The project fo
 - Expanded the packed-package consumer check to execute all new examples and require the README
   preview asset in the published tarball.
 - Clarified npm search metadata and removed the misleading `tui` keyword.
+- Added a blocking Node.js 22 candidate job without changing the published Node.js 24+ support
+  contract.
 
 ### Compatibility
 
