@@ -3,7 +3,7 @@
 Notable user-facing changes to `@0disoft/laqu` are recorded here. The project follows
 [Semantic Versioning](docs/library/semver.md).
 
-## [1.1.9] - Unreleased
+## [1.1.9] - 2026-08-13
 
 ### Added
 
