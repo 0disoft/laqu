@@ -51,8 +51,8 @@ jobs:
       - name: Check packed package
         run: bun run pack:check
 
-  node-22-candidate:
-    name: Check candidate runtime (Node.js 22, Ubuntu)
+  minimum-runtime:
+    name: Check minimum runtime (Node.js 22, Ubuntu)
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -75,8 +75,8 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Check package on candidate runtime
+      - name: Check package on minimum runtime
         run: bun run check
 
-      - name: Check packed package on candidate runtime
+      - name: Check packed package on minimum runtime
         run: bun run pack:check

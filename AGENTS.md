@@ -2,7 +2,7 @@
 
 ## Repository Scope
 
-This repository contains `@0disoft/laqu`, a TypeScript library for reliable terminal progress and live CLI rendering on Node.js 24+.
+This repository contains `@0disoft/laqu`, a TypeScript library for reliable terminal progress and live CLI rendering on Node.js 22+.
 
 The repository owns library source code, tests, examples, packaging metadata, public documentation, and the scaffold guidance added by `ssealed`.
 
@@ -25,7 +25,7 @@ As a library, this repository owns public API surface, package compatibility, se
 
 ## Hard Rules
 
-- Preserve Node.js 24+ runtime compatibility.
+- Preserve Node.js 22+ runtime compatibility.
 - Preserve the published ESM package surface in package.json unless the change intentionally updates the public API.
 - Keep stdout reserved for caller-owned data and keep progress/status output on stderr unless an API option explicitly changes that behavior.
 - Do not add process-level signal or exception handlers by default; lifecycle handling remains opt-in.

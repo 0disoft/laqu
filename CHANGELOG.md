@@ -20,13 +20,13 @@ Notable user-facing changes to `@0disoft/laqu` are recorded here. The project fo
 - Expanded the packed-package consumer check to execute all new examples and require the README
   preview asset in the published tarball.
 - Clarified npm search metadata and removed the misleading `tui` keyword.
-- Added a blocking Node.js 22 candidate job without changing the published Node.js 24+ support
-  contract.
+- Added a blocking minimum-runtime job for Node.js 22.
 
 ### Compatibility
 
 - No runtime API or event-schema changes.
-- Node.js 24 or newer remains required.
+- Lowered the minimum supported runtime from Node.js 24 to Node.js 22 after the full package and
+  packed-consumer checks passed on main.
 
 ## [1.1.8] - 2026-08-10
 

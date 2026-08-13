@@ -26,7 +26,7 @@ status-output delivery failure from application task failure.
 
 ## Compatibility Contract
 
-- Runtime target: Node.js 24+
+- Runtime target: Node.js 22+
 - Module format: ESM
 - Runtime dependencies: none
 - Public declaration files are emitted from the TypeScript build into `dist/`.

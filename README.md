@@ -1,7 +1,7 @@
 # laqu
 
 [![npm version](https://img.shields.io/npm/v/@0disoft/laqu?logo=npm)](https://www.npmjs.com/package/@0disoft/laqu)
-[![Node.js 24+](https://img.shields.io/badge/Node.js-24%2B-5FA04E?logo=nodedotjs&logoColor=white)](package.json)
+[![Node.js 22+](https://img.shields.io/badge/Node.js-22%2B-5FA04E?logo=nodedotjs&logoColor=white)](package.json)
 [![MIT license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **Progress for humans. Events for machines. stdout stays clean.**
@@ -38,7 +38,7 @@ pnpm add @0disoft/laqu
 bun add @0disoft/laqu
 ```
 
-The published package targets Node.js 24+ and does not require Bun, Deno, Rust, native addons, WASM, or C++ bindings at runtime.
+The published package targets Node.js 22+ and does not require Bun, Deno, Rust, native addons, WASM, or C++ bindings at runtime.
 
 ## Quick Start
 
@@ -320,9 +320,8 @@ bun run example:basic
 `bun run check` runs strict typecheck, OXC lint, OXC format check, Node.js built-in tests, and build output generation.
 `bun run pack:check` builds a real package tarball, installs it into a new temporary project without registry access or lifecycle scripts, executes ESM imports, and compiles a strict TypeScript consumer with dependency declaration checks enabled.
 CI runs both checks on Ubuntu, Windows, and macOS. The real PTY resize harness runs on Unix hosts; Windows runs the full stream, process-signal, renderer, and package suite without claiming ConPTY coverage.
-An additional blocking Ubuntu job runs the same package and packed-consumer checks on Node.js 22 as
-a compatibility candidate. The published support contract remains Node.js 24+ until that candidate
-has passed on main and the minimum version is changed deliberately.
+An additional blocking Ubuntu job runs the same package and packed-consumer checks on the minimum
+supported runtime, Node.js 22. The three-platform matrix runs on Node.js 24.
 `bun run example:basic` builds the package and runs a small live progress demo. Terminal scrollback keeps the final frame; watch the command while it runs to see the bar animate in place.
 
 ## Release

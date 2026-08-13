@@ -35,6 +35,6 @@ Critical release journey:
 
 ## Dependency Tiers
 
-- Runtime: Node.js 24+ standard library only; no third-party runtime dependencies.
+- Runtime: Node.js 22+ standard library only; no third-party runtime dependencies.
 - Build and validation: Bun, TypeScript, OXC formatter/linter, npm packaging, and GitHub Actions.
 - Publication: GitHub Actions OIDC, npm Trusted Publisher, and GitHub Releases.
