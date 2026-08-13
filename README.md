@@ -290,6 +290,17 @@ ANSI/control sequences are tokenized as zero-width. Text is segmented by graphem
 
 Do not mix child process output with live rendering through `stdio: "inherit"`. Pipe child output through the parent process and write it with `runtime.log()`, close the runtime before handing the terminal directly to the child process, or run progress output in plain/log mode.
 
+## Documentation And Support
+
+- [Public API](docs/library/public-api.md)
+- [Compatibility policy](docs/library/compatibility.md)
+- [SemVer policy](docs/library/semver.md)
+- [Migration guide](docs/library/migration-guide.md)
+- [Architecture and operating documentation](docs/README.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [Issues](https://github.com/0disoft/laqu/issues)
+
 ## Development
 
 ```sh
