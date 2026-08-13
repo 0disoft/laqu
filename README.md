@@ -21,7 +21,7 @@ versioned JSON/NDJSON events use the same task model when a terminal UI is not a
 stdout remains available for the result:
 
 ```json
-{"artifact":"dist/laqu.js","status":"ready"}
+{ "artifact": "dist/laqu.js", "status": "ready" }
 ```
 
 ## Install
@@ -66,12 +66,12 @@ back to stable append-only lines.
 
 ## Pick The Output Your Consumer Needs
 
-| Consumer | Configuration | Output behavior |
-| --- | --- | --- |
-| Person in a terminal | default | live progress on stderr |
-| CI log or redirected terminal | default | append-only progress on stderr |
-| Event collector | `{ format: "ndjson" }` | versioned events on stderr |
-| Data pipeline | default plus caller writes stdout | clean caller-owned stdout |
+| Consumer                      | Configuration                     | Output behavior                |
+| ----------------------------- | --------------------------------- | ------------------------------ |
+| Person in a terminal          | default                           | live progress on stderr        |
+| CI log or redirected terminal | default                           | append-only progress on stderr |
+| Event collector               | `{ format: "ndjson" }`            | versioned events on stderr     |
+| Data pipeline                 | default plus caller writes stdout | clean caller-owned stdout      |
 
 The output format, terminal capability, output target, and progress policy remain independent. You
 can change one without pretending that terminal detection, serialization, and destination are the

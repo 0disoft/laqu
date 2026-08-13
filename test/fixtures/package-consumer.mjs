@@ -7,6 +7,7 @@ const repositoryRoot = process.cwd();
 const temporaryRoot = mkdtempSync(join(tmpdir(), "laqu-package-consumer-"));
 const packDirectory = join(temporaryRoot, "pack");
 const consumerDirectory = join(temporaryRoot, "consumer");
+const installedPackage = join(consumerDirectory, "node_modules", "@0disoft", "laqu");
 const commandEnvironment = { ...process.env, npm_config_update_notifier: "false" };
 const npm = resolveNpmCommand();
 
@@ -47,7 +48,6 @@ try {
     { cwd: consumerDirectory, stdio: "pipe", env: commandEnvironment },
   );
 
-  const installedPackage = join(consumerDirectory, "node_modules", "@0disoft", "laqu");
   if (!existsSync(join(installedPackage, "media", "terminal-preview.svg"))) {
     throw new Error("packed package must include the README terminal preview");
   }
