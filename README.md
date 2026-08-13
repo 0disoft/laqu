@@ -1,19 +1,90 @@
 # laqu
 
-`laqu` is a strict TypeScript runtime for reliable terminal progress and live CLI rendering on Node.js 24+.
+**Progress for humans. Events for machines. stdout stays clean.**
 
-It treats stdout as the caller-owned data channel and sends progress, status, logs, human rendering,
-and JSON/NDJSON progress events to stderr by default. The runtime keeps output format, status-stream
-capability, output target, and progress policy as separate decisions instead of hiding them behind
-one mode enum.
+`laqu` gives Node.js and TypeScript CLIs live progress without corrupting piped JSON, CSV, file
+lists, or other caller-owned output. Human status goes to stderr by default; CI-safe text and
+versioned JSON/NDJSON events use the same task model when a terminal UI is not appropriate.
+
+```text
+› install packages  [███████████████░░░░░] 76%  downloading  76/100
+› build artifacts   [██████████░░░░░░░░░░] 49%  bundling
+· publish preview   [░░░░░░░░░░░░░░░░░░░░] 0%  waiting
+```
+
+stdout remains available for the result:
+
+```json
+{"artifact":"dist/laqu.js","status":"ready"}
+```
 
 ## Install
+
+```sh
+npm install @0disoft/laqu
+```
+
+```sh
+pnpm add @0disoft/laqu
+```
 
 ```sh
 bun add @0disoft/laqu
 ```
 
 The published package targets Node.js 24+ and does not require Bun, Deno, Rust, native addons, WASM, or C++ bindings at runtime.
+
+## Quick Start
+
+```ts
+import { createLaqu } from "@0disoft/laqu";
+
+const progress = createLaqu();
+
+const result = await progress.task("build", { total: 3 }, async (task) => {
+  task.advance(1);
+  task.setMessage("typecheck passed");
+  task.advance(1);
+  task.setMessage("bundle written");
+  task.advance(1);
+  return { artifact: "dist/laqu.js", status: "ready" };
+});
+
+await progress.close();
+process.stdout.write(`${JSON.stringify(result)}\n`);
+```
+
+When this command runs interactively, progress animates on stderr. When stdout is redirected, the
+redirected file contains only the JSON result. In CI or a pipe, human progress automatically falls
+back to stable append-only lines.
+
+## Pick The Output Your Consumer Needs
+
+| Consumer | Configuration | Output behavior |
+| --- | --- | --- |
+| Person in a terminal | default | live progress on stderr |
+| CI log or redirected terminal | default | append-only progress on stderr |
+| Event collector | `{ format: "ndjson" }` | versioned events on stderr |
+| Data pipeline | default plus caller writes stdout | clean caller-owned stdout |
+
+The output format, terminal capability, output target, and progress policy remain independent. You
+can change one without pretending that terminal detection, serialization, and destination are the
+same decision.
+
+## Runnable Examples
+
+- [`examples/basic.mjs`](examples/basic.mjs): animated multi-task terminal demo
+- [`examples/nested-tasks.mjs`](examples/nested-tasks.mjs): parent and child task hierarchy
+- [`examples/clean-stdout.mjs`](examples/clean-stdout.mjs): progress on stderr with a JSON result on stdout
+- [`examples/ndjson-events.mjs`](examples/ndjson-events.mjs): versioned NDJSON task and summary events
+
+Run an example after installing dependencies:
+
+```sh
+bun run example:clean-stdout > result.json
+```
+
+The progress remains visible in the terminal while `result.json` stays parseable JSON.
 
 ## Scoped Tasks
 
@@ -235,11 +306,11 @@ CI runs both checks on Ubuntu, Windows, and macOS. The real PTY resize harness r
 
 ## Release
 
-GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v1.1.8` for version `1.1.8`.
+GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v1.1.9` for version `1.1.9`.
 
 ```sh
-git tag -a v1.1.8 -m "v1.1.8"
-git push origin main v1.1.8
+git tag -a v1.1.9 -m "v1.1.9"
+git push origin main v1.1.9
 ```
 
 The npm package must define a Trusted Publisher connection for GitHub Actions with organization/user `0disoft`, repository `laqu`, workflow filename `release.yml`, environment name `npm`, and `npm publish` allowed. The GitHub repository must also define an `npm` environment with required reviewers and a deployment tag rule that allows only `v*.*.*` tags.

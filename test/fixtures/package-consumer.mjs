@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -82,6 +82,25 @@ try {
     { cwd: repositoryRoot, stdio: "pipe" },
   );
 
+  const cleanStdout = runExample("clean-stdout.mjs");
+  const artifact = JSON.parse(cleanStdout.stdout);
+  if (artifact.artifact !== "dist/laqu.js" || artifact.status !== "ready") {
+    throw new Error("clean stdout example must emit the documented JSON result");
+  }
+  if (cleanStdout.stderr.length === 0) {
+    throw new Error("clean stdout example must keep progress on stderr");
+  }
+
+  runExample("nested-tasks.mjs");
+  const ndjson = runExample("ndjson-events.mjs");
+  const events = ndjson.stderr
+    .trim()
+    .split(/\r?\n/u)
+    .map((line) => JSON.parse(line));
+  if (events.length === 0 || events.some((event) => event.schema !== "laqu.event")) {
+    throw new Error("NDJSON example must emit versioned laqu events");
+  }
+
   process.stdout.write(
     `${JSON.stringify({
       id: packageRecord.id,
@@ -89,6 +108,7 @@ try {
       entryCount: packageRecord.entryCount,
       installedConsumer: true,
       strictTypes: true,
+      examplesExecuted: 3,
     })}\n`,
   );
 } finally {
@@ -99,6 +119,19 @@ function writeFixture(targetName, sourcePath) {
   const target = join(consumerDirectory, targetName);
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, readFileSync(resolve(sourcePath)));
+}
+
+function runExample(name) {
+  const installedPackage = join(consumerDirectory, "node_modules", "@0disoft", "laqu");
+  const result = spawnSync(process.execPath, [join(installedPackage, "examples", name)], {
+    cwd: consumerDirectory,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (result.status !== 0) {
+    throw new Error(`${name} failed with exit code ${result.status}: ${result.stderr}`);
+  }
+  return { stdout: result.stdout, stderr: result.stderr };
 }
 
 function runNpm(arguments_, options) {
