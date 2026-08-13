@@ -26,6 +26,7 @@
   "files": [
     "dist",
     "examples",
+    "media",
     "README.md"
   ],
   "type": "module",

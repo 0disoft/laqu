@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="420" viewBox="0 0 960 420" role="img" aria-labelledby="title description">
+  <title id="title">Laqu terminal progress preview</title>
+  <desc id="description">Three concurrent CLI tasks render progress on stderr while a JSON result remains clean on stdout.</desc>
+  <rect width="960" height="420" rx="20" fill="#0b1020"/>
+  <rect x="1" y="1" width="958" height="418" rx="19" fill="none" stroke="#26324a" stroke-width="2"/>
+  <circle cx="38" cy="35" r="7" fill="#ff6b6b"/>
+  <circle cx="62" cy="35" r="7" fill="#ffd166"/>
+  <circle cx="86" cy="35" r="7" fill="#4ade80"/>
+  <text x="480" y="41" fill="#8b9bb4" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="15" text-anchor="middle">release · laqu</text>
+  <line x1="0" y1="64" x2="960" y2="64" stroke="#26324a"/>
+
+  <g font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="21">
+    <text x="36" y="112" fill="#7dd3fc">›</text>
+    <text x="70" y="112" fill="#e5edf8">install packages</text>
+    <text x="292" y="112" fill="#4ade80">[███████████████</text>
+    <text x="508" y="112" fill="#35425a">░░░░░]</text>
+    <text x="608" y="112" fill="#e5edf8">76%</text>
+    <text x="676" y="112" fill="#8b9bb4">downloading · 76/100</text>
+
+    <text x="36" y="158" fill="#7dd3fc">›</text>
+    <text x="70" y="158" fill="#e5edf8">build artifacts</text>
+    <text x="292" y="158" fill="#4ade80">[██████████</text>
+    <text x="450" y="158" fill="#35425a">░░░░░░░░░░]</text>
+    <text x="608" y="158" fill="#e5edf8">49%</text>
+    <text x="676" y="158" fill="#8b9bb4">bundling</text>
+
+    <text x="36" y="204" fill="#64748b">·</text>
+    <text x="70" y="204" fill="#e5edf8">publish preview</text>
+    <text x="292" y="204" fill="#35425a">[░░░░░░░░░░░░░░░░░░░░]</text>
+    <text x="608" y="204" fill="#e5edf8">0%</text>
+    <text x="676" y="204" fill="#8b9bb4">waiting</text>
+  </g>
+
+  <line x1="36" y1="242" x2="924" y2="242" stroke="#26324a"/>
+  <text x="36" y="280" fill="#8b9bb4" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="16">stderr · live progress</text>
+  <text x="36" y="325" fill="#8b9bb4" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="16">stdout · caller-owned result</text>
+  <rect x="36" y="344" width="888" height="48" rx="8" fill="#111a2d" stroke="#26324a"/>
+  <text x="56" y="375" fill="#f8fafc" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="18">{"artifact":"dist/laqu.js","status":"ready"}</text>
+</svg>

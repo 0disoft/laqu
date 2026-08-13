@@ -6,6 +6,8 @@
 lists, or other caller-owned output. Human status goes to stderr by default; CI-safe text and
 versioned JSON/NDJSON events use the same task model when a terminal UI is not appropriate.
 
+![Laqu rendering concurrent CLI tasks while stdout stays available for JSON](media/terminal-preview.svg)
+
 ```text
 › install packages  [███████████████░░░░░] 76%  downloading  76/100
 › build artifacts   [██████████░░░░░░░░░░] 49%  bundling

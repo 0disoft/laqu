@@ -47,6 +47,11 @@ try {
     { cwd: consumerDirectory, stdio: "pipe", env: commandEnvironment },
   );
 
+  const installedPackage = join(consumerDirectory, "node_modules", "@0disoft", "laqu");
+  if (!existsSync(join(installedPackage, "media", "terminal-preview.svg"))) {
+    throw new Error("packed package must include the README terminal preview");
+  }
+
   writeFixture("consumer.mjs", "test/fixtures/consumer-esm.mjs");
   writeFixture("consumer.ts", "test/fixtures/consumer-ts/consumer.ts");
   writeFileSync(
@@ -122,7 +127,6 @@ function writeFixture(targetName, sourcePath) {
 }
 
 function runExample(name) {
-  const installedPackage = join(consumerDirectory, "node_modules", "@0disoft", "laqu");
   const result = spawnSync(process.execPath, [join(installedPackage, "examples", name)], {
     cwd: consumerDirectory,
     encoding: "utf8",
