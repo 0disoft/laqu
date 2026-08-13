@@ -51,6 +51,9 @@ try {
   if (!existsSync(join(installedPackage, "media", "terminal-preview.svg"))) {
     throw new Error("packed package must include the README terminal preview");
   }
+  if (!existsSync(join(installedPackage, "CHANGELOG.md"))) {
+    throw new Error("packed package must include the changelog");
+  }
 
   writeFixture("consumer.mjs", "test/fixtures/consumer-esm.mjs");
   writeFixture("consumer.ts", "test/fixtures/consumer-ts/consumer.ts");

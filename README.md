@@ -1,5 +1,9 @@
 # laqu
 
+[![npm version](https://img.shields.io/npm/v/@0disoft/laqu?logo=npm)](https://www.npmjs.com/package/@0disoft/laqu)
+[![Node.js 24+](https://img.shields.io/badge/Node.js-24%2B-5FA04E?logo=nodedotjs&logoColor=white)](package.json)
+[![MIT license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **Progress for humans. Events for machines. stdout stays clean.**
 
 `laqu` gives Node.js and TypeScript CLIs live progress without corrupting piped JSON, CSV, file
@@ -298,6 +302,7 @@ Do not mix child process output with live rendering through `stdio: "inherit"`. 
 - [Compatibility policy](docs/library/compatibility.md)
 - [SemVer policy](docs/library/semver.md)
 - [Migration guide](docs/library/migration-guide.md)
+- [Changelog](CHANGELOG.md)
 - [Architecture and operating documentation](docs/README.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
