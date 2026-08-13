@@ -64,6 +64,9 @@ jobs:
           }
           NODE
 
+      - name: Check curated release notes
+        run: node tools/extract-release-notes.mjs "${GITHUB_REF_NAME}" "${RUNNER_TEMP}/release-notes.md"
+
       - name: Check package
         run: bun run check
 
@@ -176,6 +179,12 @@ jobs:
       contents: write
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Prepare curated release notes
+        run: node tools/extract-release-notes.mjs "${GITHUB_REF_NAME}" release-notes.md
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -183,4 +192,4 @@ jobs:
           gh release create "${GITHUB_REF_NAME}" \
             --repo "${GITHUB_REPOSITORY}" \
             --title "${GITHUB_REF_NAME}" \
-            --generate-notes
+            --notes-file release-notes.md
