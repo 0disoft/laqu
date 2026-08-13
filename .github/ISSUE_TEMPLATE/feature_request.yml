@@ -1,0 +1,38 @@
+name: Feature request
+description: Propose a focused improvement to Laqu
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: CLI problem
+      description: What workflow is difficult today? Describe the workaround rather than only the desired API.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: What should become possible for a CLI user or event consumer?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed shape
+      description: Optional API, output, or documentation sketch.
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Contract check
+      options:
+        - label: The proposal can keep stdout caller-owned by default.
+        - label: The proposal can keep process lifecycle handling opt-in.
+        - label: I have described compatibility or migration impact if the public API changes.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Include existing Laqu options or other workarounds you tried.

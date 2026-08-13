@@ -1,0 +1,27 @@
+name: Usage question
+description: Ask for help using Laqu or discuss an early design idea
+title: "[Question]: "
+labels:
+  - question
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: What are you trying to build?
+    validations:
+      required: true
+  - type: textarea
+    id: attempt
+    attributes:
+      label: What have you tried?
+      description: Include a small code sample when it helps explain the question.
+      render: javascript
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Laqu and Node.js versions
+      placeholder: Laqu 1.1.9, Node.js 24.x
+    validations:
+      required: true

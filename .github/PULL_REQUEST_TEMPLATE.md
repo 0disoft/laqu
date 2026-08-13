@@ -8,9 +8,9 @@
 
 ## API contract changes
 
-## DB schema changes
+## Compatibility or migration impact
 
-## Hygiene file changes
+## Package or documentation changes
 
 ## Risk
 
@@ -18,12 +18,11 @@
 
 ## Skipped validation and reasons
 
-## Design review checklist confirmation
+## Checklist
 
-## Performance budget confirmation
-
-## Security baseline confirmation
-
-## Testing standard confirmation
+- [ ] Public behavior and README are synchronized, or this change has no public behavior impact.
+- [ ] Tests cover changed behavior, or the reason they do not is stated above.
+- [ ] stdout remains caller-owned and process lifecycle handling remains opt-in.
+- [ ] Generated build output is not committed.
 
 ## Rollback or recovery path

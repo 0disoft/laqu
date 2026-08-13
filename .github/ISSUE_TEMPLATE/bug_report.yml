@@ -1,0 +1,74 @@
+name: Bug report
+description: Report a reproducible Laqu defect
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a problem. For vulnerabilities, use the private path in SECURITY.md instead.
+  - type: input
+    id: version
+    attributes:
+      label: Laqu version
+      placeholder: 1.1.9
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version
+      placeholder: 24.x
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Output environment
+      options:
+        - Interactive TTY
+        - CI
+        - Pipe or redirected stream
+        - Dumb terminal
+        - Custom stream
+    validations:
+      required: true
+  - type: dropdown
+    id: format
+    attributes:
+      label: Output format
+      options:
+        - human
+        - json
+        - ndjson
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include runnable code and the exact command when possible.
+      render: javascript
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Remove secrets and private data from logs or event output.
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Operating system and terminal
+      placeholder: Windows 11 / Windows Terminal, macOS / Terminal, Ubuntu / GitHub Actions
+    validations:
+      required: true
