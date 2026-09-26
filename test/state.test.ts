@@ -233,6 +233,7 @@ test("pruning completed children does not change their parent's weighted progres
   const after = store.snapshot().tasks[0]?.aggregate;
   deepStrictEqual(before, { kind: "ratio", ratio: 0.5, overrun: false });
   deepStrictEqual(after, before);
+  strictEqual(store.snapshot().tasks[0]?.aggregateFromChildren, true);
   strictEqual(store.retentionStats().retainedTerminalTasks, 0);
 
   store.update(active, { progress: setCompletedProgress(1, store.getProgress(active)) });
@@ -282,6 +283,7 @@ test("terminal retention can prune silent work without rendering snapshots", () 
     ratio: 1,
     overrun: false,
   });
+  strictEqual(store.snapshot().tasks[0]?.aggregateFromChildren, true);
 });
 
 test("task creation rejects terminal parents", () => {

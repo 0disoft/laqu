@@ -17,6 +17,8 @@ Notable user-facing changes to `@0disoft/laqu` are recorded here. The project fo
   immediately; use one runtime with child tasks or separate streams.
 - Plain and machine-readable output preserve task creation, terminal transitions, and retained logs
   in mutation order while frequent progress updates may be combined.
+- Human output shows direct `current/total` counts or counter values without assigning a percentage
+  to counters; parent rows continue to show their child aggregate.
 - `flush()` and `close()` wait for laqu's writes to complete on Node.js `Writable` streams.
 
 ### Fixed

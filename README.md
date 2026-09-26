@@ -242,6 +242,8 @@ Task event fields such as `parentId`, `message`, and `detail` are omitted when t
 `task.progress` is the displayed aggregate across children. `task.ownProgress` preserves this task's
 direct input: a `determinate` value includes `current` and `total`, while a `counter` includes
 `current` without inventing a percentage. Consumers should ignore fields they do not use.
+Human output shows `current/total` beside the bar for a standalone determinate task, or its current
+count without a percentage when no total is known. Parent task rows keep the child aggregate.
 Silent and never-output policies prune completed task records without waiting for an output snapshot.
 
 ```json

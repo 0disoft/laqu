@@ -225,6 +225,29 @@ test("human progress renders themed percentage bar", async () => {
   strictEqual(stderr.text().includes("[==========..........] 50%"), true);
 });
 
+test("human progress shows counts and keeps the parent aggregate", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({
+    stderr,
+    env: {},
+    streamCapability: "pipe",
+    progressPolicy: "plain",
+  });
+  runtime.createTask("bounded", { total: 100, completed: 42 });
+  runtime.createTask("counter", { completed: 42 });
+  const parent = runtime.createTask("parent", { completed: 99 });
+  parent.child("child", { total: 10, completed: 5 });
+  await runtime.close();
+
+  const lines = stderr.text().split("\n");
+  const lastRow = (title: string): string =>
+    lines.filter((line) => line.includes(title)).at(-1) ?? "";
+  strictEqual(lastRow("bounded").includes("42/100 42%"), true);
+  strictEqual(/counter\s+42(?![%/])/u.test(lastRow("counter")), true);
+  strictEqual(lastRow("parent").includes("50%"), true);
+  strictEqual(lastRow("parent").includes("99"), false);
+});
+
 test("scoped task succeeds and closes cleanly", async () => {
   const stderr = new FakeStream();
   const runtime = createLaqu({ stderr, env: {}, streamCapability: "pipe" });

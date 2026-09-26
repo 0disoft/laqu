@@ -259,6 +259,7 @@ function task(id: string, title: string): TaskSnapshot {
     status: "running",
     progress: noneProgress,
     aggregate: noneAggregate,
+    aggregateFromChildren: false,
     message: undefined,
     detail: undefined,
     weight: 1,

@@ -339,10 +339,17 @@ function progressText(task: TaskSnapshot, theme: CompiledTheme): string {
   if (task.progress.kind === "indeterminate") {
     return theme.tokens.progressIndeterminate;
   }
+  if (!task.aggregateFromChildren && task.progress.kind === "counter") {
+    return String(task.progress.current);
+  }
   if (task.aggregate.kind === "ratio") {
     const percent = Math.round(task.aggregate.ratio * 100);
     const suffix = task.aggregate.overrun ? "+" : "";
-    return `${progressBar(task.aggregate.ratio, task.aggregate.overrun, theme)} ${percent}${suffix}%`;
+    const count =
+      !task.aggregateFromChildren && task.progress.kind === "determinate"
+        ? `${task.progress.current}/${task.progress.total} `
+        : "";
+    return `${progressBar(task.aggregate.ratio, task.aggregate.overrun, theme)} ${count}${percent}${suffix}%`;
   }
   if (task.aggregate.kind === "mixed") {
     return "mixed";

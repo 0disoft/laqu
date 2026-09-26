@@ -27,6 +27,7 @@ export interface TaskSnapshot {
   readonly status: TaskStatus;
   readonly progress: ProgressState;
   readonly aggregate: AggregateProgress;
+  readonly aggregateFromChildren: boolean;
   readonly message: string | undefined;
   readonly detail: string | undefined;
   readonly weight: number;
@@ -295,6 +296,7 @@ export class TaskStore {
         status: node.status,
         progress: node.progress,
         aggregate: aggregateProgress(node.progress, children, node.prunedChildren),
+        aggregateFromChildren: children.length > 0 || node.prunedChildren !== undefined,
         message: node.message,
         detail: node.detail,
         weight: node.weight,
