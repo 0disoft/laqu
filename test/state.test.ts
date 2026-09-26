@@ -261,6 +261,29 @@ test("terminal retention releases per-task bookkeeping over repeated lifecycles"
   });
 });
 
+test("terminal retention can prune silent work without rendering snapshots", () => {
+  const store = new TaskStore({ maxTerminalTasks: 0 });
+  const parent = store.createTask("parent");
+
+  for (let index = 0; index < 100; index += 1) {
+    const child = store.createTask(`child-${index}`, { total: 1, completed: 1 }, parent);
+    store.update(child, { status: "succeeded" });
+    store.pruneWithoutOutput();
+  }
+
+  deepStrictEqual(store.retentionStats(), {
+    retainedTasks: 1,
+    retainedTerminalTasks: 0,
+    pendingTerminalSnapshots: 0,
+    pendingPruneCandidates: 0,
+  });
+  deepStrictEqual(store.snapshot().tasks[0]?.aggregate, {
+    kind: "ratio",
+    ratio: 1,
+    overrun: false,
+  });
+});
+
 test("task creation rejects terminal parents", () => {
   const store = new TaskStore();
   const parent = store.createTask("parent");

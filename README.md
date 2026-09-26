@@ -235,6 +235,7 @@ try {
 
 The runtime retains the newest 1000 log records and 1000 terminal task records by default so long-running commands do not keep unbounded output buffers. Set `retention.maxLogs` or `retention.maxTerminalTasks` to smaller non-negative integers when only the latest output window should be rendered or emitted. Terminal task pruning affects retained task rows and task events only after the terminal task has been snapshotted for rendering; summary events keep lifecycle counts for all tasks created by the runtime.
 Task event fields such as `parentId`, `message`, and `detail` are omitted when they are absent.
+Silent and never-output policies prune completed task records without waiting for an output snapshot.
 
 ```json
 {

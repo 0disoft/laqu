@@ -315,12 +315,11 @@ class LaquRuntime implements ProgressRuntime {
   }
 
   private markDirty(immediate = false): void {
-    if (
-      this.#state === "finalizing" ||
-      this.#state === "closed" ||
-      this.policy === "silent" ||
-      this.policy === "never"
-    ) {
+    if (this.#state === "finalizing" || this.#state === "closed") {
+      return;
+    }
+    if (this.policy === "silent" || this.policy === "never") {
+      this.store.pruneWithoutOutput();
       return;
     }
     this.#dirty = true;

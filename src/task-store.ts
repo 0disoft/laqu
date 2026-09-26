@@ -214,6 +214,11 @@ export class TaskStore {
     return snapshot;
   }
 
+  pruneWithoutOutput(): void {
+    this.#markTerminalTasksSnapshotted();
+    this.#pruneTerminalTasks();
+  }
+
   retentionStats(): {
     readonly retainedTasks: number;
     readonly retainedTerminalTasks: number;
