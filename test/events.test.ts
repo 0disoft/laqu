@@ -21,6 +21,7 @@ test("task event schema is versioned and nests task payload", () => {
   strictEqual(event.version, LAQU_EVENT_SCHEMA_VERSION);
   strictEqual(event.type, "task");
   deepStrictEqual(event.task.progress, { kind: "ratio", ratio: 0.5, overrun: false });
+  deepStrictEqual(event.task.ownProgress, { kind: "ratio", ratio: 0.5, overrun: false });
 });
 
 test("task event progress preserves overrun separately from clamped ratio", () => {
@@ -32,6 +33,27 @@ test("task event progress preserves overrun separately from clamped ratio", () =
   }
 
   deepStrictEqual(taskEvent(snapshot).task.progress, { kind: "ratio", ratio: 1, overrun: true });
+  deepStrictEqual(taskEvent(snapshot).task.ownProgress, {
+    kind: "determinate",
+    current: 2,
+    total: 1,
+    ratio: 1,
+    overrun: true,
+  });
+});
+
+test("task event keeps direct counter progress separate from child aggregation", () => {
+  const store = new TaskStore();
+  const parentId = store.createTask("parent", { completed: 42 });
+  store.createTask("child", { total: 100, completed: 25 }, parentId);
+  const parent = store.snapshot().tasks[0];
+  if (parent === undefined) {
+    throw new Error("missing parent snapshot");
+  }
+
+  const event = taskEvent(parent);
+  deepStrictEqual(event.task.progress, { kind: "ratio", ratio: 0.25, overrun: false });
+  deepStrictEqual(event.task.ownProgress, { kind: "counter", current: 42 });
 });
 
 test("task event omits absent optional task fields", () => {

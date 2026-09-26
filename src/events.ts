@@ -25,6 +25,7 @@ export interface LaquTaskEvent extends Omit<LaquEventBase, "type"> {
     readonly parentId?: string;
     readonly status: TaskStatus;
     readonly progress: LaquEventProgress;
+    readonly ownProgress: LaquEventOwnProgress;
     readonly message?: string;
     readonly detail?: string;
     readonly depth: number;
@@ -53,6 +54,19 @@ export type LaquEventProgress =
   | { readonly kind: "mixed" }
   | { readonly kind: "ratio"; readonly ratio: number; readonly overrun: boolean };
 
+export type LaquEventOwnProgress =
+  | { readonly kind: "none" }
+  | { readonly kind: "ratio"; readonly ratio: number; readonly overrun: boolean }
+  | {
+      readonly kind: "determinate";
+      readonly current: number;
+      readonly total: number;
+      readonly ratio: number;
+      readonly overrun: boolean;
+    }
+  | { readonly kind: "indeterminate" }
+  | { readonly kind: "counter"; readonly current: number };
+
 export function taskEvent(task: TaskSnapshot, createdAt = Date.now()): LaquTaskEvent {
   return {
     schema: LAQU_EVENT_SCHEMA,
@@ -64,6 +78,7 @@ export function taskEvent(task: TaskSnapshot, createdAt = Date.now()): LaquTaskE
       title: task.title,
       status: task.status,
       progress: eventProgress(task.aggregate),
+      ownProgress: task.progress,
       depth: task.depth,
       ...(task.parentId === undefined ? {} : { parentId: task.parentId }),
       ...(task.message === undefined ? {} : { message: task.message }),

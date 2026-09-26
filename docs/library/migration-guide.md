@@ -10,6 +10,8 @@ stream now throws `LaquOutputError` with code `LAQU_OUTPUT_STREAM_IN_USE`. In 1.
 could fall back to plain output while a live owner was active, which could corrupt the terminal
 display. Share one runtime and use child tasks for concurrent work, or pass distinct status streams
 to independent runtimes. Close the first runtime before reusing its stream.
+Task events also include `ownProgress` alongside aggregate `progress`, so consumers can read direct
+counts without interpreting a counter as a percentage. Existing consumers may ignore the new field.
 
 ## Upgrading Within 1.x
 

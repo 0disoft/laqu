@@ -8,6 +8,8 @@ Notable user-facing changes to `@0disoft/laqu` are recorded here. The project fo
 ### Added
 
 - Added `LAQU_OUTPUT_WRITE_TIMEOUT` and `LAQU_OUTPUT_STREAM_IN_USE` output error codes.
+- Task events now include `ownProgress` with the task's direct count or ratio alongside the existing
+  aggregate `progress` field.
 
 ### Changed
 

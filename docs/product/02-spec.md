@@ -52,6 +52,8 @@ package documentation must preserve.
 
 - JSON events use the versioned `laqu.event` schema. JSON format closes as one array; NDJSON emits
   newline-delimited objects.
+- Task events expose aggregate `progress` and direct `ownProgress` without treating counters as
+  percentages.
 - Optional event fields are omitted when absent. Summary counts survive terminal-task pruning.
 - Log and terminal-task retention default to 1,000 records each and accept bounded non-negative
   overrides.

@@ -23,6 +23,8 @@ This repository type owns public API surface, package compatibility, semantic ve
 
 The package root exports `LaquOutputError` and `LaquOutputErrorCode` so callers can distinguish
 status-output delivery failure from application task failure.
+Task events expose aggregate `progress` and direct `ownProgress`; the latter retains `current` and
+`total` for determinate tasks or `current` for counters.
 
 ## Compatibility Contract
 

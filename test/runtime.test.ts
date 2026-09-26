@@ -4,6 +4,7 @@ import { EventEmitter } from "node:events";
 import { resolve } from "node:path";
 import test from "node:test";
 
+import type { LaquEvent } from "../src/events.js";
 import { createLaqu } from "../src/index.js";
 import { unknownToRejectionError } from "../src/runtime.js";
 import type { StreamTarget } from "../src/types.js";
@@ -133,9 +134,18 @@ test("json progress events still use status stream by default", async () => {
     .trim()
     .split("\n")
     .filter(Boolean)
-    .map((line) => JSON.parse(line) as { readonly schema?: unknown });
+    .map((line) => JSON.parse(line) as LaquEvent);
   strictEqual(
     events.every((event) => event.schema === "laqu.event"),
+    true,
+  );
+  strictEqual(
+    events.some(
+      (event) =>
+        event.type === "task" &&
+        event.task.ownProgress.kind === "ratio" &&
+        event.task.ownProgress.ratio === 0.5,
+    ),
     true,
   );
 });

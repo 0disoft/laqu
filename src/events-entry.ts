@@ -7,6 +7,7 @@ export {
   type LaquEvent,
   type LaquEventBase,
   type LaquEventProgress,
+  type LaquEventOwnProgress,
   type LaquLogEvent,
   type LaquSummaryEvent,
   type LaquTaskEvent,
