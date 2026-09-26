@@ -9,7 +9,7 @@ metadata, and release behavior:
 
 - stdout remains caller-owned unless a caller explicitly supplies it as the status stream.
 - Process-level signal and exception handling remains opt-in.
-- A stream has at most one live renderer owner.
+- A status stream has at most one active runtime owner.
 - Task terminal states are not overwritten by ordinary updates.
 - Scoped callback failures preserve the original rejection and task cleanup still runs.
 - Public text is sanitized; raw ANSI requires the named dangerous API.

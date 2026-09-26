@@ -193,7 +193,7 @@ By default:
 - stdout is reserved for user data such as JSON, NDJSON, CSV, file lists, or binary output.
 - stderr is used for progress, status, logs, and machine-readable progress events.
 - human live rendering is enabled only when the status stream is a TTY and the environment is not CI.
-- only one runtime owns live rendering for a stream at a time; concurrent runtimes on that same stream fall back to plain append rendering until the live owner closes.
+- one runtime owns a status stream at a time. Creating another runtime with the same stream before the first closes throws `LAQU_OUTPUT_STREAM_IN_USE`; share a runtime's task tree or supply separate streams.
 - CI, pipe, dumb terminal, and non-TTY output fall back to plain append rendering unless a different policy is requested.
 - plain append rendering preserves task creation and terminal transitions and full sanitized text for retained logs; frequent progress changes may be combined. `maxRows` and terminal-width truncation apply only to live rendering. Live rendering prioritizes active tasks, never exceeds the configured or available terminal rows, and redraws from current terminal dimensions when the status stream emits `resize`.
 - JSON/NDJSON progress events do not go to stdout unless the caller explicitly passes a separate status stream that points there.

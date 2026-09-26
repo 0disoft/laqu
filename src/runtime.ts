@@ -24,11 +24,11 @@ import type {
 
 const defaultFlushHz = 15;
 const fatalShutdownTimeoutMs = 250;
-const liveStreamLeases = new WeakSet<StreamTarget>();
+const statusStreamLeases = new WeakSet<StreamTarget>();
 
 type RuntimeState = "open" | "draining" | "finalizing" | "closed";
 
-interface LiveStreamLease {
+interface StatusStreamLease {
   release(): void;
 }
 
@@ -52,20 +52,19 @@ export function createProgressRuntime(options: RuntimeOptions = {}): ProgressRun
     columns: () => normalizedColumns(stderr.columns),
     maxRows: () => normalizedRows(stderr.rows, configuredMaxRows),
   };
-  const initialDecision = chooseRenderer(rendererOptions);
-  const liveStreamLease = initialDecision.live ? acquireLiveStreamLease(stderr) : undefined;
-  const decision =
-    initialDecision.live && liveStreamLease === undefined
-      ? chooseRenderer({ ...rendererOptions, policy: "plain" })
-      : initialDecision;
+  const decision = chooseRenderer(rendererOptions);
+  const store = new TaskStore({
+    maxLogs: options.retention?.maxLogs,
+    maxTerminalTasks: options.retention?.maxTerminalTasks,
+    recordOutput: !decision.live && policy !== "silent" && policy !== "never",
+  });
+  const statusStreamLease = acquireStatusStreamLease(stderr);
+  if (statusStreamLease === undefined) {
+    throw new LaquOutputError("LAQU_OUTPUT_STREAM_IN_USE", "status stream already has a runtime");
+  }
 
   let runtime: LaquRuntime | undefined;
   try {
-    const store = new TaskStore({
-      maxLogs: options.retention?.maxLogs,
-      maxTerminalTasks: options.retention?.maxTerminalTasks,
-      recordOutput: !decision.live && policy !== "silent" && policy !== "never",
-    });
     const coordinator = new OutputCoordinator(
       stderr,
       decision.renderer,
@@ -76,7 +75,7 @@ export function createProgressRuntime(options: RuntimeOptions = {}): ProgressRun
       store,
       coordinator,
       policy,
-      liveStreamLease,
+      statusStreamLease,
       decision.live ? stderr : undefined,
     );
     if (options.manageProcessLifecycle === true) {
@@ -86,7 +85,7 @@ export function createProgressRuntime(options: RuntimeOptions = {}): ProgressRun
   } catch (error) {
     runtime?.disposeInfrastructure();
     if (runtime === undefined) {
-      liveStreamLease?.release();
+      statusStreamLease.release();
     }
     throw error;
   }
@@ -112,7 +111,7 @@ class LaquRuntime implements ProgressRuntime {
     private readonly store: TaskStore,
     private readonly coordinator: OutputCoordinator,
     private readonly policy: ProgressPolicy,
-    private readonly liveStreamLease: LiveStreamLease | undefined,
+    private readonly statusStreamLease: StatusStreamLease,
     resizeTarget: StreamTarget | undefined,
   ) {
     if (resizeTarget !== undefined) {
@@ -128,7 +127,7 @@ class LaquRuntime implements ProgressRuntime {
     this.#processLifecycle = undefined;
     this.#terminalResizeCleanup?.();
     this.#terminalResizeCleanup = undefined;
-    this.liveStreamLease?.release();
+    this.statusStreamLease.release();
   }
 
   async task<T>(title: string, callback: (task: TaskHandle) => T | Promise<T>): Promise<Awaited<T>>;
@@ -861,11 +860,11 @@ export function unknownToRejectionError(reason: unknown): Error {
   );
 }
 
-function acquireLiveStreamLease(stream: StreamTarget): LiveStreamLease | undefined {
-  if (liveStreamLeases.has(stream)) {
+function acquireStatusStreamLease(stream: StreamTarget): StatusStreamLease | undefined {
+  if (statusStreamLeases.has(stream)) {
     return undefined;
   }
-  liveStreamLeases.add(stream);
+  statusStreamLeases.add(stream);
   let released = false;
   return {
     release() {
@@ -873,7 +872,7 @@ function acquireLiveStreamLease(stream: StreamTarget): LiveStreamLease | undefin
         return;
       }
       released = true;
-      liveStreamLeases.delete(stream);
+      statusStreamLeases.delete(stream);
     },
   };
 }

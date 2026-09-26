@@ -1,6 +1,6 @@
 # ADR 0001: Output and Lifecycle Boundary
 
-- Status: Accepted
+- Status: Superseded by ADR 0002 for concurrent status-stream ownership
 - Date: 2026-08-09
 
 ## Context

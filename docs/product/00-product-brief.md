@@ -33,7 +33,7 @@ safe terminal rendering, and machine-readable progress events from one small run
 - Human progress remains readable across TTY, CI, pipe, and dumb-terminal capabilities.
 - Machine-readable events remain parseable and versioned.
 - Task failure preserves and rethrows the caller's original error.
-- Closing restores terminal state and releases listeners and live-stream ownership.
+- Closing restores terminal state and releases listeners and status-stream ownership.
 - Long-running commands can bound retained logs and completed task records.
 
 ## Non-Goals

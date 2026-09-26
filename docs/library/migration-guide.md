@@ -3,6 +3,14 @@
 - Status: Active
 - Owner: Maintainers
 
+## Upgrading to 2.0.0
+
+Only one active runtime can use a status-stream object. Creating a second runtime for the same
+stream now throws `LaquOutputError` with code `LAQU_OUTPUT_STREAM_IN_USE`. In 1.x, a second runtime
+could fall back to plain output while a live owner was active, which could corrupt the terminal
+display. Share one runtime and use child tasks for concurrent work, or pass distinct status streams
+to independent runtimes. Close the first runtime before reusing its stream.
+
 ## Upgrading Within 1.x
 
 Read the release notes, keep imports on the documented package root or subpaths, and run the

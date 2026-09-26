@@ -16,7 +16,7 @@ primitives but does not own a service, database, network protocol, or durable st
 
 1. `createLaqu()` validates options, detects the status-stream capability, compiles the theme, and
    chooses a renderer.
-2. The runtime acquires a live-stream lease when possible and otherwise selects a safe fallback.
+2. The runtime acquires exclusive status-stream ownership or rejects concurrent use.
 3. Task handles mutate `TaskStore`; snapshots derive hierarchy, aggregate progress, logs, and
    summary counts.
 4. A throttled flush sends a snapshot to the renderer and then to `OutputCoordinator`.
@@ -24,7 +24,7 @@ primitives but does not own a service, database, network protocol, or durable st
    enforces a bounded pending-frame budget, and maintains the live terminal lease.
 6. `close()` moves through `open → draining → finalizing → closed`. Draining rejects new caller
    work while existing scoped tasks finish; finalizing cancels remaining handles, renders the final
-   snapshot, restores terminal state, removes lifecycle listeners, and releases live ownership.
+   snapshot, restores terminal state, removes lifecycle listeners, and releases stream ownership.
 
 Fatal signal and exception handling skips draining. It attempts finalization for a bounded 250
 milliseconds and then re-delivers the original process termination cause even when application work

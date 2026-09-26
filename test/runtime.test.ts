@@ -23,6 +23,22 @@ class FakeStream implements StreamTarget {
   }
 }
 
+class ConstructorFailingStream extends FakeStream {
+  failNextListener = true;
+
+  on(): unknown {
+    if (this.failNextListener) {
+      this.failNextListener = false;
+      throw new Error("listener setup failed");
+    }
+    return this;
+  }
+
+  off(): unknown {
+    return this;
+  }
+}
+
 class DeferredDrainStream extends EventEmitter implements StreamTarget {
   readonly chunks: string[] = [];
   isTTY = false;
@@ -481,8 +497,8 @@ test("runtime rejects invalid maxRows values", () => {
   });
 });
 
-test("runtime construction failure releases live stream ownership", async () => {
-  const stderr = new FakeStream();
+test("runtime construction failure releases status stream ownership", async () => {
+  const stderr = new ConstructorFailingStream();
   stderr.isTTY = true;
 
   throws(
@@ -491,9 +507,8 @@ test("runtime construction failure releases live stream ownership", async () => 
         stderr,
         env: {},
         streamCapability: "tty",
-        retention: { maxLogs: -1 },
       }),
-    { message: "maxLogs must be a safe non-negative integer" },
+    { message: "listener setup failed" },
   );
 
   const runtime = createLaqu({ stderr, env: {}, streamCapability: "tty" });
@@ -661,29 +676,24 @@ test("runtime rejects mutations after close", async () => {
   throws(() => task.setMessage("late"), { message: "Laqu runtime is closing" });
 });
 
-test("concurrent live runtimes on the same stream fall back to plain rendering", async () => {
+test("status streams reject concurrent runtimes and release ownership on close", async () => {
   const stderr = new FakeStream();
   stderr.isTTY = true;
   const primary = createLaqu({ stderr, env: {}, streamCapability: "tty" });
 
   primary.createTask("primary", { ratio: 0.25 });
   await primary.flush();
-  const chunksAfterPrimary = stderr.chunks.length;
+  throws(() => createLaqu({ stderr, env: {}, progressPolicy: "plain" }), {
+    name: "LaquOutputError",
+    code: "LAQU_OUTPUT_STREAM_IN_USE",
+  });
+  await primary.close();
 
   const secondary = createLaqu({ stderr, env: {}, streamCapability: "tty" });
   secondary.createTask("secondary", { ratio: 0.5 });
-  await secondary.flush();
-
-  const secondaryOutput = stderr.chunks.slice(chunksAfterPrimary).join("");
-  strictEqual(secondaryOutput.includes("secondary"), true);
-  strictEqual(secondaryOutput.includes("\u001b[?25l"), false);
-  strictEqual(secondaryOutput.includes("\u001b[2K"), false);
-
   await secondary.close();
-  await primary.close();
-
-  strictEqual(countOccurrences(stderr.text(), "\u001b[?25l"), 1);
-  strictEqual(countOccurrences(stderr.text(), "\u001b[?25h"), 1);
+  strictEqual(countOccurrences(stderr.text(), "\u001b[?25l"), 2);
+  strictEqual(countOccurrences(stderr.text(), "\u001b[?25h"), 2);
 });
 
 test("NDJSON preserves a task's creation and completion during another flush", async () => {

@@ -38,8 +38,8 @@ package documentation must preserve.
 - Renderer selection treats format, stream capability, and progress policy as independent inputs.
 - Automatic live rendering requires a human format on a non-CI TTY. Other automatic cases use
   append-only output.
-- At most one runtime owns live rendering for a stream. A concurrent runtime falls back to plain
-  output until the live owner closes.
+- One runtime owns a status stream until it closes. Concurrent construction with the same stream
+  fails with `LAQU_OUTPUT_STREAM_IN_USE` so live and append-only output cannot collide.
 - Logs pass through the output coordinator so they cannot corrupt the live region.
 - Plain and JSON frames remain ordered under backpressure; live frames use latest-screen-wins while
   preserving scrollback.
