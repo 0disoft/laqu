@@ -7,6 +7,7 @@ This document owns stable validation names for `@0disoft/laqu`.
 - Workspace command intent: `laqu_check`
 - Direct package command: `bun run check`
 - Package artifact command: `bun run pack:check`
+- Optional local benchmark intent: `laqu_bench_quick` (`bun run bench:quick`)
 
 ## Standard Validation Names
 

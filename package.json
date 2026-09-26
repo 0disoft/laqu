@@ -56,6 +56,7 @@
   },
   "scripts": {
     "build": "bun run clean && tsc -p tsconfig.build.json",
+    "bench:quick": "bun run build && node --expose-gc benchmarks/quick.mjs",
     "check": "bun run typecheck && bun run lint && bun run format:check && bun run test && bun run build",
     "clean": "node -e \"const fs = require('node:fs'); for (const p of ['dist', 'dist-test', 'coverage']) fs.rmSync(p, { recursive: true, force: true });\"",
     "example:basic": "bun run build && node examples/basic.mjs",
