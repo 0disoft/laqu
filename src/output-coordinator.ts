@@ -53,6 +53,19 @@ export class OutputCoordinator {
   #pendingLiveFrameCount = 0;
   #pendingCount = 0;
   #outputError: LaquOutputError | undefined;
+  readonly #onStreamError = (error: unknown): void => {
+    this.#fail(
+      new LaquOutputError("LAQU_OUTPUT_WRITE_FAILED", "status stream emitted an error", {
+        cause: error,
+      }),
+    );
+  };
+  readonly #onStreamClose = (): void => {
+    this.#fail(new LaquOutputError("LAQU_OUTPUT_WRITE_FAILED", "status stream closed"));
+  };
+  readonly #onStreamFinish = (): void => {
+    this.#fail(new LaquOutputError("LAQU_OUTPUT_WRITE_FAILED", "status stream finished"));
+  };
 
   constructor(
     private readonly target: StreamTarget,
@@ -61,7 +74,20 @@ export class OutputCoordinator {
     private readonly jsonSerialization: JsonSerialization = "none",
     private readonly backpressureTimeoutMs = 1_000,
     private readonly maxPendingFrames = 4_096,
-  ) {}
+  ) {
+    if (target.on !== undefined && target.off !== undefined) {
+      try {
+        target.on("error", this.#onStreamError);
+        target.on("close", this.#onStreamClose);
+        target.on("finish", this.#onStreamFinish);
+      } catch (error) {
+        target.off("error", this.#onStreamError);
+        target.off("close", this.#onStreamClose);
+        target.off("finish", this.#onStreamFinish);
+        throw error;
+      }
+    }
+  }
 
   render(snapshot: RuntimeSnapshot): void {
     if (this.lease.closed || this.#outputError !== undefined) {
@@ -165,6 +191,9 @@ export class OutputCoordinator {
       }
     } finally {
       this.#settleDrain?.();
+      this.target.off?.("error", this.#onStreamError);
+      this.target.off?.("close", this.#onStreamClose);
+      this.target.off?.("finish", this.#onStreamFinish);
       this.lease.closed = true;
       this.lease.renderedLineCount = 0;
       this.lease.cursorHiddenByUs = 0;
@@ -349,40 +378,14 @@ export class OutputCoordinator {
           this.#drainTimer = undefined;
         }
         this.target.off?.("drain", onDrain);
-        this.target.off?.("error", onError);
-        this.target.off?.("close", onClose);
-        this.target.off?.("finish", onFinish);
         this.#waitingForDrain = false;
         this.#drainPromise = undefined;
         this.#settleDrain = undefined;
         resolve();
       };
       const onDrain = () => settle();
-      const onError = (error: unknown) => {
-        this.#storeError(
-          new LaquOutputError("LAQU_OUTPUT_WRITE_FAILED", "status stream emitted an error", {
-            cause: error,
-          }),
-        );
-        settle();
-      };
-      const onClose = () => {
-        this.#storeError(
-          new LaquOutputError("LAQU_OUTPUT_WRITE_FAILED", "status stream closed before drain"),
-        );
-        settle();
-      };
-      const onFinish = () => {
-        this.#storeError(
-          new LaquOutputError("LAQU_OUTPUT_WRITE_FAILED", "status stream finished before drain"),
-        );
-        settle();
-      };
       this.#settleDrain = settle;
       this.target.on?.("drain", onDrain);
-      this.target.on?.("error", onError);
-      this.target.on?.("close", onClose);
-      this.target.on?.("finish", onFinish);
       this.#drainTimer = setTimeout(() => {
         this.#storeError(
           new LaquOutputError(

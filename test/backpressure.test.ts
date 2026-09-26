@@ -174,6 +174,27 @@ test("backpressure timeout is sticky and observable", async () => {
   strictEqual(output.includes("snapshot-2"), false);
 });
 
+test("stream errors without backpressure remain sticky until close", async () => {
+  const stream = new BackpressureStream();
+  stream.failNext = false;
+  const coordinator = new OutputCoordinator(stream, renderer, false);
+  coordinator.render(snapshot(1));
+  await coordinator.flush();
+
+  stream.emit("error", new Error("asynchronous write failure"));
+  await rejects(coordinator.flush(), {
+    name: "LaquOutputError",
+    code: "LAQU_OUTPUT_WRITE_FAILED",
+  });
+  await rejects(coordinator.close(), {
+    name: "LaquOutputError",
+    code: "LAQU_OUTPUT_WRITE_FAILED",
+  });
+  strictEqual(stream.listenerCount("error"), 0);
+  strictEqual(stream.listenerCount("close"), 0);
+  strictEqual(stream.listenerCount("finish"), 0);
+});
+
 test("pending output queue fails explicitly at its bound", async () => {
   const stream = new HangingBackpressureStream();
   const coordinator = new OutputCoordinator(stream, renderer, false, "none", 1_000, 2);

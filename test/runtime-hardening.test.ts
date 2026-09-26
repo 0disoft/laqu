@@ -150,12 +150,12 @@ test("pending drain listeners are cleaned up when replayed output write fails", 
   });
 
   strictEqual(stream.listenerCount("drain"), 0);
-  strictEqual(stream.listenerCount("error"), 0);
-  strictEqual(stream.listenerCount("close"), 0);
-  strictEqual(stream.listenerCount("finish"), 0);
   strictEqual(stream.chunks.length, 2);
   await rejects(output.close(), {
     name: "LaquOutputError",
     code: "LAQU_OUTPUT_WRITE_FAILED",
   });
+  strictEqual(stream.listenerCount("error"), 0);
+  strictEqual(stream.listenerCount("close"), 0);
+  strictEqual(stream.listenerCount("finish"), 0);
 });
