@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
-import { OutputCoordinator } from "./output-coordinator.js";
+import { LaquOutputError, OutputCoordinator } from "./output-coordinator.js";
 import { chooseRenderer } from "./renderer.js";
 import {
   advanceProgress,
@@ -52,10 +52,6 @@ export function createProgressRuntime(options: RuntimeOptions = {}): ProgressRun
     columns: () => normalizedColumns(stderr.columns),
     maxRows: () => normalizedRows(stderr.rows, configuredMaxRows),
   };
-  const store = new TaskStore({
-    maxLogs: options.retention?.maxLogs,
-    maxTerminalTasks: options.retention?.maxTerminalTasks,
-  });
   const initialDecision = chooseRenderer(rendererOptions);
   const liveStreamLease = initialDecision.live ? acquireLiveStreamLease(stderr) : undefined;
   const decision =
@@ -65,6 +61,11 @@ export function createProgressRuntime(options: RuntimeOptions = {}): ProgressRun
 
   let runtime: LaquRuntime | undefined;
   try {
+    const store = new TaskStore({
+      maxLogs: options.retention?.maxLogs,
+      maxTerminalTasks: options.retention?.maxTerminalTasks,
+      recordOutput: !decision.live && policy !== "silent" && policy !== "never",
+    });
     const coordinator = new OutputCoordinator(
       stderr,
       decision.renderer,
@@ -263,7 +264,16 @@ class LaquRuntime implements ProgressRuntime {
         this.#timer = undefined;
       }
       this.#dirty = false;
-      this.coordinator.render(this.store.snapshot());
+      const snapshot = this.store.snapshot();
+      if (snapshot.outputOverflowed === true) {
+        this.coordinator.reportFailure(
+          new LaquOutputError(
+            "LAQU_OUTPUT_BUFFER_OVERFLOW",
+            "task and log output exceeded 4096 pending records",
+          ),
+        );
+      }
+      this.coordinator.render(snapshot);
       await this.coordinator.flush();
     } while (
       this.#dirty &&

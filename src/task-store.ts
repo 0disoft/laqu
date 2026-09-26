@@ -40,7 +40,13 @@ export interface RuntimeSnapshot {
   readonly logs: readonly LogRecord[];
   readonly summary: TaskSummaryCounts;
   readonly createdAt: number;
+  readonly outputRecords?: readonly OutputRecord[];
+  readonly outputOverflowed?: boolean;
 }
+
+export type OutputRecord =
+  | { readonly kind: "task"; readonly task: TaskSnapshot; readonly createdAt: number }
+  | { readonly kind: "log"; readonly log: LogRecord };
 
 export interface TaskSummaryCounts {
   readonly total: number;
@@ -66,6 +72,7 @@ interface TaskNode {
   message: string | undefined;
   detail: string | undefined;
   weight: number;
+  depth: number;
   children: Set<string>;
   updatedAt: number;
   snapshottedTerminal: boolean;
@@ -93,6 +100,9 @@ export class TaskStore {
   readonly #pruneCandidates: string[] = [];
   readonly #maxLogs: number;
   readonly #maxTerminalTasks: number;
+  readonly #recordOutput: boolean;
+  #outputRecords: OutputRecord[] = [];
+  #outputOverflowed = false;
   readonly #summaryCounts = {
     total: 0,
     running: 0,
@@ -110,6 +120,7 @@ export class TaskStore {
     options: {
       readonly maxLogs?: number | undefined;
       readonly maxTerminalTasks?: number | undefined;
+      readonly recordOutput?: boolean | undefined;
     } = {},
   ) {
     this.#maxLogs = validatedMaxRecords(options.maxLogs ?? 1_000, "maxLogs");
@@ -117,6 +128,7 @@ export class TaskStore {
       options.maxTerminalTasks ?? 1_000,
       "maxTerminalTasks",
     );
+    this.#recordOutput = options.recordOutput ?? false;
   }
 
   createTask(title: string, options: TaskOptions = {}, parentId?: string): string {
@@ -137,6 +149,7 @@ export class TaskStore {
       message: options.message,
       detail: options.detail,
       weight,
+      depth: parent === undefined ? 0 : parent.depth + 1,
       children: new Set(),
       updatedAt: now,
       snapshottedTerminal: false,
@@ -153,6 +166,8 @@ export class TaskStore {
       parent.children.add(id);
       parent.updatedAt = now;
     }
+
+    this.#recordTaskOutput(node);
 
     return id;
   }
@@ -194,11 +209,15 @@ export class TaskStore {
       this.#nextLogSequence += 1;
       return;
     }
-    this.#logs.push({ message, createdAt: Date.now(), sequence: this.#nextLogSequence });
+    const log = { message, createdAt: Date.now(), sequence: this.#nextLogSequence };
+    this.#logs.push(log);
     this.#nextLogSequence += 1;
     const excess = this.#logs.length - this.#maxLogs;
     if (excess > 0) {
       this.#logs.splice(0, excess);
+    }
+    if (this.#recordOutput) {
+      this.#appendOutput({ kind: "log", log });
     }
   }
 
@@ -208,6 +227,12 @@ export class TaskStore {
       logs: [...this.#logs],
       summary: { ...this.#summaryCounts },
       createdAt: Date.now(),
+      ...(this.#recordOutput
+        ? {
+            outputRecords: this.#drainOutputRecords(),
+            outputOverflowed: this.#outputOverflowed,
+          }
+        : {}),
     };
     this.#pruneTerminalTasks();
     this.#markTerminalTasksSnapshotted();
@@ -233,15 +258,14 @@ export class TaskStore {
     };
   }
 
-  #snapshotTasks(): readonly TaskSnapshot[] {
+  #snapshotTasks(rootIds: readonly string[] = [...this.#rootIds]): readonly TaskSnapshot[] {
     const snapshots = new Map<string, TaskSnapshot>();
     const stack: { readonly id: string; readonly depth: number; readonly visited: boolean }[] = [];
-    const rootIds = [...this.#rootIds];
 
     for (let index = rootIds.length - 1; index >= 0; index -= 1) {
       const id = rootIds[index];
       if (id !== undefined) {
-        stack.push({ id, depth: 0, visited: false });
+        stack.push({ id, depth: this.#requireNode(id).depth, visited: false });
       }
     }
 
@@ -309,6 +333,48 @@ export class TaskStore {
       this.#retainedTerminalTasks += 1;
       this.#pendingTerminalSnapshots.push(id);
     }
+    this.#recordTaskOutput(this.#requireNode(id));
+  }
+
+  #recordTaskOutput(node: TaskNode): void {
+    if (!this.#recordOutput || this.#outputOverflowed) {
+      return;
+    }
+    const snapshot = this.#snapshotTasks([node.id])[0];
+    if (snapshot !== undefined) {
+      this.#appendOutput({
+        kind: "task",
+        task: { ...snapshot, children: [] },
+        createdAt: Date.now(),
+      });
+    }
+  }
+
+  #appendOutput(record: OutputRecord): void {
+    if (this.#outputOverflowed) {
+      return;
+    }
+    const maxPendingRecords = 4_096;
+    if (this.#outputRecords.length >= maxPendingRecords) {
+      const oldestRetainedLog = this.#logs[0]?.sequence ?? Number.POSITIVE_INFINITY;
+      this.#outputRecords = this.#outputRecords.filter(
+        (entry) => entry.kind === "task" || entry.log.sequence >= oldestRetainedLog,
+      );
+    }
+    if (this.#outputRecords.length >= maxPendingRecords) {
+      this.#outputOverflowed = true;
+      return;
+    }
+    this.#outputRecords.push(record);
+  }
+
+  #drainOutputRecords(): OutputRecord[] {
+    const oldestRetainedLog = this.#logs[0]?.sequence ?? Number.POSITIVE_INFINITY;
+    const records = this.#outputRecords.filter(
+      (entry) => entry.kind === "task" || entry.log.sequence >= oldestRetainedLog,
+    );
+    this.#outputRecords.length = 0;
+    return records;
   }
 
   #pruneTerminalTasks(): void {

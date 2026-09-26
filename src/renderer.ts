@@ -108,8 +108,19 @@ export class PlainLogRenderer implements Renderer {
 
   render(snapshot: RuntimeSnapshot): Frame {
     const lines: string[] = [];
-    const newLogs = logsAfterSequence(snapshot.logs, this.#seenLogSequence);
-    lines.push(...newLogs.map((log) => sanitizeText(log.message)));
+    if (snapshot.outputRecords === undefined) {
+      const newLogs = logsAfterSequence(snapshot.logs, this.#seenLogSequence);
+      lines.push(...newLogs.map((log) => sanitizeText(log.message)));
+    } else {
+      for (const record of snapshot.outputRecords) {
+        if (record.kind === "log") {
+          lines.push(sanitizeText(record.log.message));
+        } else {
+          lines.push(renderTaskRow(record.task, this.theme));
+          this.#seenTaskStates.set(record.task.id, taskStateKey(record.task));
+        }
+      }
+    }
     this.#seenLogSequence = lastLogSequence(snapshot.logs, this.#seenLogSequence);
 
     const rows = flattenTasks(snapshot.tasks);
@@ -136,12 +147,22 @@ export class JsonEventRenderer implements Renderer {
   render(snapshot: RuntimeSnapshot): Frame {
     const events: LaquEvent[] = [];
     const tasks = flattenTasks(snapshot.tasks);
-    pruneSeenTaskStates(this.#seenTaskStates, tasks);
-
-    for (const log of logsAfterSequence(snapshot.logs, this.#seenLogSequence)) {
-      events.push(logEvent(log.message, log.createdAt));
+    if (snapshot.outputRecords === undefined) {
+      for (const log of logsAfterSequence(snapshot.logs, this.#seenLogSequence)) {
+        events.push(logEvent(log.message, log.createdAt));
+      }
+    } else {
+      for (const record of snapshot.outputRecords) {
+        if (record.kind === "log") {
+          events.push(logEvent(record.log.message, record.log.createdAt));
+        } else {
+          events.push(taskEvent(record.task, record.createdAt));
+          this.#seenTaskStates.set(record.task.id, taskStateKey(record.task));
+        }
+      }
     }
     this.#seenLogSequence = lastLogSequence(snapshot.logs, this.#seenLogSequence);
+    pruneSeenTaskStates(this.#seenTaskStates, tasks);
 
     for (const task of tasks) {
       const state = taskStateKey(task);

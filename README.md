@@ -195,7 +195,7 @@ By default:
 - human live rendering is enabled only when the status stream is a TTY and the environment is not CI.
 - only one runtime owns live rendering for a stream at a time; concurrent runtimes on that same stream fall back to plain append rendering until the live owner closes.
 - CI, pipe, dumb terminal, and non-TTY output fall back to plain append rendering unless a different policy is requested.
-- plain append rendering preserves every task state transition and full sanitized log text; `maxRows` and terminal-width truncation apply only to live rendering. Live rendering prioritizes active tasks, never exceeds the configured or available terminal rows, and redraws from current terminal dimensions when the status stream emits `resize`.
+- plain append rendering preserves task creation and terminal transitions and full sanitized text for retained logs; frequent progress changes may be combined. `maxRows` and terminal-width truncation apply only to live rendering. Live rendering prioritizes active tasks, never exceeds the configured or available terminal rows, and redraws from current terminal dimensions when the status stream emits `resize`.
 - JSON/NDJSON progress events do not go to stdout unless the caller explicitly passes a separate status stream that points there.
 
 ```ts
@@ -208,6 +208,10 @@ const progress = createLaqu({
 ```
 
 Machine-readable progress events use a versioned schema. `format: "json"` writes one parseable JSON array when the runtime closes; `format: "ndjson"` and `progressPolicy: "jsonl"` write newline-delimited event objects as work progresses.
+Plain and machine-readable output preserve task creation, terminal transitions, and retained logs in
+mutation order. Pending task and log records are bounded to 4096; exceeding the limit reports
+`LAQU_OUTPUT_BUFFER_OVERFLOW` instead of silently dropping task transitions. `retention.maxLogs`
+may intentionally omit older logs that have not yet been emitted.
 
 Plain and machine-readable frames are queued in order while the status stream is backpressured.
 The queue is bounded to 4096 pending frames. A write exception, stream termination, drain timeout,

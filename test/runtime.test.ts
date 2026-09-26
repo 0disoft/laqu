@@ -686,6 +686,80 @@ test("concurrent live runtimes on the same stream fall back to plain rendering",
   strictEqual(countOccurrences(stderr.text(), "\u001b[?25h"), 1);
 });
 
+test("NDJSON preserves a task's creation and completion during another flush", async () => {
+  const stderr = new DeferredDrainStream();
+  const runtime = createLaqu({ stderr, env: {}, format: "ndjson", streamCapability: "pipe" });
+  runtime.createTask("holding output");
+  const quick = runtime.createTask("quick");
+  runtime.log("between transitions");
+  quick.succeed();
+
+  stderr.emit("drain");
+  await runtime.close();
+  const events = stderr
+    .text()
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as { type: string; task?: { title: string; status: string } });
+  const sequence = events.flatMap((event) => {
+    if (event.type === "log") {
+      return ["log"];
+    }
+    if (event.type === "task" && event.task?.title === "quick") {
+      return [event.task.status];
+    }
+    return [];
+  });
+  deepStrictEqual(sequence, ["running", "log", "succeeded"]);
+});
+
+test("plain output preserves short task transitions during backpressure", async () => {
+  const stderr = new DeferredDrainStream();
+  const runtime = createLaqu({ stderr, env: {}, streamCapability: "pipe" });
+  runtime.createTask("holding output");
+  const quick = runtime.createTask("quick");
+  quick.succeed();
+
+  stderr.emit("drain");
+  await runtime.close();
+  const lines = stderr.text().split("\n");
+  strictEqual(lines.filter((line) => line.includes("quick")).length, 2);
+});
+
+test("log retention omits older records before blocked output resumes", async () => {
+  const stderr = new DeferredDrainStream();
+  const runtime = createLaqu({
+    stderr,
+    env: {},
+    format: "ndjson",
+    streamCapability: "pipe",
+    retention: { maxLogs: 1 },
+  });
+  runtime.createTask("holding output");
+  runtime.log("older");
+  runtime.log("newer");
+
+  stderr.emit("drain");
+  await runtime.close();
+  strictEqual(stderr.text().includes('"message":"older"'), false);
+  strictEqual(stderr.text().includes('"message":"newer"'), true);
+});
+
+test("pending lifecycle records fail explicitly when output is blocked", async () => {
+  const stderr = new DeferredDrainStream();
+  const runtime = createLaqu({ stderr, env: {}, format: "ndjson", streamCapability: "pipe" });
+  runtime.createTask("holding output");
+
+  for (let index = 0; index < 2_050; index += 1) {
+    runtime.createTask(`quick-${index}`).succeed();
+  }
+  stderr.emit("drain");
+  await rejects(runtime.close(), {
+    name: "LaquOutputError",
+    code: "LAQU_OUTPUT_BUFFER_OVERFLOW",
+  });
+});
+
 test("live stream ownership is released after close", async () => {
   const stderr = new FakeStream();
   stderr.isTTY = true;

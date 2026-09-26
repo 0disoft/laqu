@@ -107,6 +107,10 @@ export class OutputCoordinator {
     this.writeFrame(this.renderer.render(snapshot));
   }
 
+  reportFailure(error: LaquOutputError): void {
+    this.#fail(error);
+  }
+
   writeFrame(frame: Frame): void {
     if (frame.kind === "none" || this.lease.closed || this.#outputError !== undefined) {
       return;

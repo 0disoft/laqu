@@ -53,12 +53,12 @@ export type LaquEventProgress =
   | { readonly kind: "mixed" }
   | { readonly kind: "ratio"; readonly ratio: number; readonly overrun: boolean };
 
-export function taskEvent(task: TaskSnapshot): LaquTaskEvent {
+export function taskEvent(task: TaskSnapshot, createdAt = Date.now()): LaquTaskEvent {
   return {
     schema: LAQU_EVENT_SCHEMA,
     version: LAQU_EVENT_SCHEMA_VERSION,
     type: "task",
-    createdAt: Date.now(),
+    createdAt,
     task: {
       id: task.id,
       title: task.title,
