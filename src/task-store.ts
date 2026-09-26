@@ -70,6 +70,15 @@ interface TaskNode {
   updatedAt: number;
   snapshottedTerminal: boolean;
   pruneCandidateQueued: boolean;
+  prunedChildren: PrunedChildren | undefined;
+}
+
+interface PrunedChildren {
+  count: number;
+  weightedRatio: number;
+  totalWeight: number;
+  mixed: boolean;
+  overrun: boolean;
 }
 
 type TaskNodeUpdate = Partial<
@@ -132,6 +141,7 @@ export class TaskStore {
       updatedAt: now,
       snapshottedTerminal: false,
       pruneCandidateQueued: false,
+      prunedChildren: undefined,
     };
     this.#tasks.set(id, node);
     this.#summaryCounts.total += 1;
@@ -255,7 +265,7 @@ export class TaskStore {
         title: node.title,
         status: node.status,
         progress: node.progress,
-        aggregate: aggregateProgress(node.progress, children),
+        aggregate: aggregateProgress(node.progress, children, node.prunedChildren),
         message: node.message,
         detail: node.detail,
         weight: node.weight,
@@ -349,8 +359,25 @@ export class TaskStore {
     }
     const parent = this.#tasks.get(node.parentId);
     if (parent !== undefined) {
+      const aggregate = aggregateProgress(node.progress, [], node.prunedChildren);
+      const pruned = (parent.prunedChildren ??= {
+        count: 0,
+        weightedRatio: 0,
+        totalWeight: 0,
+        mixed: false,
+        overrun: false,
+      });
+      pruned.count += 1;
+      if (node.weight > 0) {
+        if (aggregate.kind === "ratio") {
+          pruned.weightedRatio += aggregate.ratio * node.weight;
+          pruned.totalWeight += node.weight;
+          pruned.overrun ||= aggregate.overrun;
+        } else {
+          pruned.mixed = true;
+        }
+      }
       parent.children.delete(node.id);
-      parent.updatedAt = Date.now();
       this.#enqueuePruneCandidate(parent);
     }
   }
@@ -433,14 +460,18 @@ function determinate(current: number, total: number): ProgressState {
 function aggregateProgress(
   ownProgress: ProgressState,
   children: readonly TaskSnapshot[],
+  pruned: PrunedChildren | undefined = undefined,
 ): AggregateProgress {
-  if (children.length === 0) {
+  if (children.length === 0 && pruned === undefined) {
     return aggregateFromProgress(ownProgress);
   }
 
-  let weightedRatio = 0;
-  let totalWeight = 0;
-  let overrun = false;
+  if (pruned?.mixed === true) {
+    return { kind: "mixed" };
+  }
+  let weightedRatio = pruned?.weightedRatio ?? 0;
+  let totalWeight = pruned?.totalWeight ?? 0;
+  let overrun = pruned?.overrun ?? false;
 
   for (const child of children) {
     if (child.weight === 0) {

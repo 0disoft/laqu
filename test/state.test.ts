@@ -221,6 +221,28 @@ test("zero terminal task retention prunes after the retained task is resnapshott
   });
 });
 
+test("pruning completed children does not change their parent's weighted progress", () => {
+  const store = new TaskStore({ maxTerminalTasks: 0 });
+  const parent = store.createTask("parent");
+  const completed = store.createTask("completed", { total: 1, completed: 1 }, parent);
+  const active = store.createTask("active", { total: 1 }, parent);
+  store.update(completed, { status: "succeeded" });
+
+  const before = store.snapshot().tasks[0]?.aggregate;
+  store.snapshot();
+  const after = store.snapshot().tasks[0]?.aggregate;
+  deepStrictEqual(before, { kind: "ratio", ratio: 0.5, overrun: false });
+  deepStrictEqual(after, before);
+  strictEqual(store.retentionStats().retainedTerminalTasks, 0);
+
+  store.update(active, { progress: setCompletedProgress(1, store.getProgress(active)) });
+  deepStrictEqual(store.snapshot().tasks[0]?.aggregate, {
+    kind: "ratio",
+    ratio: 1,
+    overrun: false,
+  });
+});
+
 test("terminal retention releases per-task bookkeeping over repeated lifecycles", () => {
   const store = new TaskStore({ maxTerminalTasks: 0 });
 
