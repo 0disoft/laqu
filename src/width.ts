@@ -24,11 +24,8 @@ interface SgrState {
   underlineColor: boolean;
 }
 
-// CSI, OSC, and common one-byte ESC sequences.
-const ansiPattern = new RegExp(
-  String.raw`\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007]*(?:\u0007|\u001b\\)|[@-Z\\-_])`,
-  "g",
-);
+// CSI and common one-byte ESC sequences. OSC needs its first BEL or ST terminator.
+const ansiPattern = new RegExp(String.raw`\u001b(?:\[[0-?]*[ -/]*[@-~]|[@-Z\\-_])`, "y");
 const resetSequence = "\u001b[0m";
 const unsafeControlPattern = new RegExp(String.raw`[\u0000-\u0008\u000a-\u001f\u007f-\u009f]`, "g");
 const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
@@ -49,13 +46,30 @@ export function tokenizeAnsi(input: string): AnsiToken[] {
   const tokens: AnsiToken[] = [];
   let lastIndex = 0;
 
-  for (const match of input.matchAll(ansiPattern)) {
-    const index = match.index ?? 0;
+  for (let index = 0; index < input.length; index += 1) {
+    if (input.charCodeAt(index) !== 0x1b) {
+      continue;
+    }
+
+    let end: number | undefined;
+    if (input[index + 1] === "]") {
+      end = oscEnd(input, index + 2);
+    } else {
+      ansiPattern.lastIndex = index;
+      const match = ansiPattern.exec(input);
+      if (match !== null) {
+        end = index + match[0].length;
+      }
+    }
+    if (end === undefined) {
+      continue;
+    }
     if (index > lastIndex) {
       tokens.push({ kind: "text", value: input.slice(lastIndex, index) });
     }
-    tokens.push({ kind: "ansi", value: match[0] });
-    lastIndex = index + match[0].length;
+    tokens.push({ kind: "ansi", value: input.slice(index, end) });
+    lastIndex = end;
+    index = end - 1;
   }
 
   if (lastIndex < input.length) {
@@ -63,6 +77,18 @@ export function tokenizeAnsi(input: string): AnsiToken[] {
   }
 
   return tokens;
+}
+
+function oscEnd(input: string, start: number): number {
+  for (let index = start; index < input.length; index += 1) {
+    if (input.charCodeAt(index) === 0x07) {
+      return index + 1;
+    }
+    if (input.charCodeAt(index) === 0x1b && input[index + 1] === "\\") {
+      return index + 2;
+    }
+  }
+  return input.length;
 }
 
 export function stripAnsi(input: string): string {

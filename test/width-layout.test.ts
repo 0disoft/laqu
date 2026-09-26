@@ -28,6 +28,24 @@ test("OSC hyperlink sequence is zero width", () => {
   strictEqual(stripAnsi(link), "docs");
 });
 
+test("ST-terminated OSC sequences preserve visible text between controls", () => {
+  const link = "\u001b]8;;https://example.com\u001b\\한글👩‍💻\u001b]8;;\u001b\\";
+  const adjacent = "\u001b]0;first\u001b\\KEEP\u001b]0;second\u001b\\";
+
+  strictEqual(stripAnsi(link), "한글👩‍💻");
+  strictEqual(displayWidth(link), 6);
+  strictEqual(stripAnsi(adjacent), "KEEP");
+  deepStrictEqual(
+    tokenizeAnsi(adjacent).map((token) => token.kind),
+    ["ansi", "text", "ansi"],
+  );
+});
+
+test("OSC consumes only its first terminator and hides incomplete payloads", () => {
+  strictEqual(stripAnsi("\u001b]0;title\u0007visible"), "visible");
+  strictEqual(stripAnsi("before\u001b]8;;unfinished"), "before");
+});
+
 test("width corpus covers East Asian text and Unicode emoji presentation", () => {
   strictEqual(displayWidth("한글"), 4);
   strictEqual(displayWidth("表"), 2);
