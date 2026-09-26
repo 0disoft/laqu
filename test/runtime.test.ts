@@ -248,6 +248,29 @@ test("human progress shows counts and keeps the parent aggregate", async () => {
   strictEqual(lastRow("parent").includes("99"), false);
 });
 
+test("plain output redraws a parent when child progress replaces its own count", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({
+    stderr,
+    env: {},
+    streamCapability: "pipe",
+    progressPolicy: "plain",
+  });
+  const parent = runtime.createTask("parent", { total: 10, completed: 5 });
+  await runtime.flush();
+  parent.child("child", { total: 10, completed: 5 });
+  await runtime.flush();
+  await runtime.close();
+
+  const parentRows = stderr
+    .text()
+    .split("\n")
+    .filter((line) => line.includes("parent"));
+  strictEqual(parentRows[0]?.includes("5/10 50%"), true);
+  strictEqual(parentRows.at(-1)?.includes("50%"), true);
+  strictEqual(parentRows.at(-1)?.includes("5/10"), false);
+});
+
 test("scoped task succeeds and closes cleanly", async () => {
   const stderr = new FakeStream();
   const runtime = createLaqu({ stderr, env: {}, streamCapability: "pipe" });

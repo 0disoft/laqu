@@ -117,7 +117,7 @@ export class PlainLogRenderer implements Renderer {
           lines.push(sanitizeText(record.log.message));
         } else {
           lines.push(renderTaskRow(record.task, this.theme));
-          this.#seenTaskStates.set(record.task.id, taskStateKey(record.task));
+          this.#seenTaskStates.set(record.task.id, humanTaskStateKey(record.task));
         }
       }
     }
@@ -127,7 +127,7 @@ export class PlainLogRenderer implements Renderer {
     pruneSeenTaskStates(this.#seenTaskStates, rows);
 
     for (const row of rows) {
-      const state = taskStateKey(row);
+      const state = humanTaskStateKey(row);
       if (this.#seenTaskStates.get(row.id) === state) {
         continue;
       }
@@ -303,6 +303,10 @@ function taskStateKey(task: TaskSnapshot): string {
   return JSON.stringify([task.status, task.message, task.detail, task.progress, task.aggregate]);
 }
 
+function humanTaskStateKey(task: TaskSnapshot): string {
+  return `${taskStateKey(task)}:${task.aggregateFromChildren}`;
+}
+
 function statusSymbol(task: TaskSnapshot, theme: CompiledTheme): string {
   switch (task.status) {
     case "succeeded":
@@ -336,7 +340,7 @@ function statusStyle(status: TaskStatus): "muted" | "success" | "error" | "warni
 }
 
 function progressText(task: TaskSnapshot, theme: CompiledTheme): string {
-  if (task.progress.kind === "indeterminate") {
+  if (!task.aggregateFromChildren && task.progress.kind === "indeterminate") {
     return theme.tokens.progressIndeterminate;
   }
   if (!task.aggregateFromChildren && task.progress.kind === "counter") {
