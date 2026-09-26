@@ -31,7 +31,7 @@ function measureTaskSet(taskCount) {
     ids.push(store.createTask(title, { total: 100, completed: index % 100 }));
   }
   const createMs = round(performance.now() - createStart);
-  const retainedHeapBytes = collectHeap() - beforeHeap;
+  const afterCreateHeap = collectHeap();
 
   const snapshotStart = performance.now();
   const snapshot = store.snapshot();
@@ -54,7 +54,8 @@ function measureTaskSet(taskCount) {
 
   return {
     createMs,
-    retainedHeapBytes,
+    heapBeforeBytes: beforeHeap,
+    heapAfterCreateBytes: afterCreateHeap,
     snapshotMs,
     renderMs,
     frameBytes: Buffer.byteLength(frame.lines.join("\n")),
@@ -123,7 +124,13 @@ const report = {
   nodeVersion: process.versions.node,
   platform: process.platform,
   architecture: process.arch,
-  conditions: { columns, maxRows, samplesPerSize, forcedGc: typeof global.gc === "function" },
+  conditions: {
+    columns,
+    maxRows,
+    warmupTaskCount: 10,
+    samplesPerSize,
+    forcedGc: typeof global.gc === "function",
+  },
   taskSets,
   deepTree: measureDeepTree(),
   slowStream: await measureSlowStream(),
