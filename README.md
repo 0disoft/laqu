@@ -336,11 +336,11 @@ supported runtime, Node.js 22. The three-platform matrix runs on Node.js 24.
 
 ## Release
 
-GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v1.1.9` for version `1.1.9`.
+GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v2.0.0` for version `2.0.0`.
 
 ```sh
-git tag -a v1.1.9 -m "v1.1.9"
-git push origin main v1.1.9
+git tag -a v2.0.0 -m "v2.0.0"
+git push origin main v2.0.0
 ```
 
 The npm package must define a Trusted Publisher connection for GitHub Actions with organization/user `0disoft`, repository `laqu`, workflow filename `release.yml`, environment name `npm`, and `npm publish` allowed. The GitHub repository must also define an `npm` environment with required reviewers and a deployment tag rule that allows only `v*.*.*` tags.

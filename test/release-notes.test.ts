@@ -10,12 +10,12 @@ test("extracts curated notes for the release tag", () => {
   const output = join(temporaryRoot, "notes.md");
 
   try {
-    execFileSync(process.execPath, [resolve("tools/extract-release-notes.mjs"), "v1.1.9", output]);
+    execFileSync(process.execPath, [resolve("tools/extract-release-notes.mjs"), "v2.0.0", output]);
     const notes = readFileSync(output, "utf8");
 
     match(notes, /### Added/u);
     match(notes, /### Compatibility/u);
-    ok(!notes.includes("## [1.1.8]"));
+    ok(!notes.includes("## [1.1.9]"));
   } finally {
     rmSync(temporaryRoot, { recursive: true, force: true });
   }

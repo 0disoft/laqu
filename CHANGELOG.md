@@ -3,6 +3,33 @@
 Notable user-facing changes to `@0disoft/laqu` are recorded here. The project follows
 [Semantic Versioning](docs/library/semver.md).
 
+## [2.0.0] - 2026-09-27
+
+### Added
+
+- Added `LAQU_OUTPUT_WRITE_TIMEOUT` and `LAQU_OUTPUT_STREAM_IN_USE` output error codes.
+
+### Changed
+
+- A status stream now has one active runtime owner. A second runtime using that stream fails
+  immediately; use one runtime with child tasks or separate streams.
+- Plain and machine-readable output preserve task creation, terminal transitions, and retained logs
+  in mutation order while frequent progress updates may be combined.
+- `flush()` and `close()` wait for laqu's writes to complete on Node.js `Writable` streams.
+
+### Fixed
+
+- Kept the original scoped task error when status output also fails.
+- Preserved parent progress when completed child records are pruned and enforced retention in
+  silent-output modes.
+- Preserved visible text between ST-terminated OSC controls.
+
+### Compatibility
+
+- Concurrent runtimes sharing one status stream no longer fall back to plain output. See the
+  [2.0.0 migration guide](docs/library/migration-guide.md).
+- Package exports and event schema version `1` remain unchanged.
+
 ## [1.1.9] - 2026-08-13
 
 ### Added
@@ -39,5 +66,6 @@ Notable user-facing changes to `@0disoft/laqu` are recorded here. The project fo
 
 - Adopted the TypeScript 7 toolchain.
 
+[2.0.0]: https://github.com/0disoft/laqu/compare/v1.1.9...v2.0.0
 [1.1.9]: https://github.com/0disoft/laqu/compare/v1.1.8...v1.1.9
 [1.1.8]: https://github.com/0disoft/laqu/releases/tag/v1.1.8
