@@ -1,5 +1,6 @@
 import { rejects, strictEqual } from "node:assert";
 import { EventEmitter } from "node:events";
+import { Writable } from "node:stream";
 import test from "node:test";
 
 import { logEvent } from "../src/events.js";
@@ -65,6 +66,28 @@ class HangingBackpressureStream extends EventEmitter implements StreamTarget {
       return false;
     }
     return true;
+  }
+}
+
+class DeferredWritable extends Writable {
+  readonly chunks: string[] = [];
+  readonly pending: Array<(error?: Error | null) => void> = [];
+
+  constructor() {
+    super({ decodeStrings: false });
+  }
+
+  override _write(
+    chunk: string,
+    _encoding: BufferEncoding,
+    callback: (error?: Error | null) => void,
+  ): void {
+    this.chunks.push(chunk);
+    this.pending.push(callback);
+  }
+
+  complete(error?: Error): void {
+    this.pending.shift()?.(error);
   }
 }
 
@@ -193,6 +216,61 @@ test("stream errors without backpressure remain sticky until close", async () =>
   strictEqual(stream.listenerCount("error"), 0);
   strictEqual(stream.listenerCount("close"), 0);
   strictEqual(stream.listenerCount("finish"), 0);
+});
+
+test("flush waits for a Node Writable write even when write returns true", async () => {
+  const stream = new DeferredWritable();
+  const coordinator = new OutputCoordinator(stream, renderer, false);
+  coordinator.render(snapshot(1));
+
+  const flushing = coordinator.flush();
+  let completed = false;
+  void flushing.then(() => {
+    completed = true;
+  });
+  await Promise.resolve();
+  strictEqual(completed, false);
+
+  stream.complete();
+  await flushing;
+  strictEqual(completed, true);
+  await coordinator.close();
+  strictEqual(stream.listenerCount("error"), 0);
+});
+
+test("Node Writable write callback failures remain sticky", async () => {
+  const stream = new DeferredWritable();
+  const coordinator = new OutputCoordinator(stream, renderer, false);
+  coordinator.render(snapshot(1));
+
+  const flushing = coordinator.flush();
+  stream.complete(new Error("late write failure"));
+  await rejects(flushing, {
+    name: "LaquOutputError",
+    code: "LAQU_OUTPUT_WRITE_FAILED",
+  });
+  await rejects(coordinator.close(), {
+    name: "LaquOutputError",
+    code: "LAQU_OUTPUT_WRITE_FAILED",
+  });
+  strictEqual(stream.listenerCount("error"), 0);
+});
+
+test("Node Writable writes that never complete fail within the output deadline", async () => {
+  const stream = new DeferredWritable();
+  const coordinator = new OutputCoordinator(stream, renderer, false, "none", 5);
+  coordinator.render(snapshot(1));
+
+  await rejects(coordinator.flush(), {
+    name: "LaquOutputError",
+    code: "LAQU_OUTPUT_WRITE_TIMEOUT",
+  });
+  await rejects(coordinator.close(), {
+    name: "LaquOutputError",
+    code: "LAQU_OUTPUT_WRITE_TIMEOUT",
+  });
+  stream.complete();
+  strictEqual(stream.listenerCount("error"), 0);
 });
 
 test("pending output queue fails explicitly at its bound", async () => {

@@ -1,3 +1,5 @@
+import { Writable } from "node:stream";
+
 import type { Frame, JsonSerialization, Renderer } from "./renderer.js";
 import type { RuntimeSnapshot } from "./task-store.js";
 import type { StreamTarget } from "./types.js";
@@ -10,8 +12,14 @@ interface PendingLiveFrame {
   lines: readonly string[];
 }
 
+interface PendingWrite {
+  timer: ReturnType<typeof setTimeout>;
+  settled: boolean;
+}
+
 export type LaquOutputErrorCode =
   | "LAQU_OUTPUT_WRITE_FAILED"
+  | "LAQU_OUTPUT_WRITE_TIMEOUT"
   | "LAQU_OUTPUT_BACKPRESSURE_TIMEOUT"
   | "LAQU_OUTPUT_BACKPRESSURE_UNSUPPORTED"
   | "LAQU_OUTPUT_BUFFER_OVERFLOW";
@@ -52,6 +60,9 @@ export class OutputCoordinator {
   #pendingLiveFrame: PendingLiveFrame | undefined;
   #pendingLiveFrameCount = 0;
   #pendingCount = 0;
+  readonly #pendingWrites = new Set<PendingWrite>();
+  #writePromise: Promise<void> | undefined;
+  #resolveWrites: (() => void) | undefined;
   #outputError: LaquOutputError | undefined;
   readonly #onStreamError = (error: unknown): void => {
     this.#fail(
@@ -131,6 +142,10 @@ export class OutputCoordinator {
       this.#throwIfFailed();
       if (this.#drainPromise !== undefined) {
         await this.#drainPromise;
+        continue;
+      }
+      if (this.#writePromise !== undefined) {
+        await this.#writePromise;
         continue;
       }
       const pending = this.#dequeuePending();
@@ -341,9 +356,18 @@ export class OutputCoordinator {
       return;
     }
     let accepted: boolean;
+    const trackedWrite = this.target instanceof Writable ? this.#trackWrite() : undefined;
     try {
-      accepted = this.target.write(chunk);
+      accepted =
+        trackedWrite === undefined
+          ? this.target.write(chunk)
+          : (this.target as Writable).write(chunk, (error) =>
+              this.#settleWrite(trackedWrite, error),
+            );
     } catch (error) {
+      if (trackedWrite !== undefined) {
+        this.#settleWrite(trackedWrite);
+      }
       this.#fail(
         new LaquOutputError("LAQU_OUTPUT_WRITE_FAILED", "status output write failed", {
           cause: error,
@@ -364,6 +388,45 @@ export class OutputCoordinator {
       return;
     }
     this.#waitForDrain();
+  }
+
+  #trackWrite(): PendingWrite {
+    if (this.#pendingWrites.size === 0) {
+      this.#writePromise = new Promise((resolve) => {
+        this.#resolveWrites = resolve;
+      });
+    }
+    const pending: PendingWrite = {
+      settled: false,
+      timer: setTimeout(() => {
+        this.#fail(
+          new LaquOutputError(
+            "LAQU_OUTPUT_WRITE_TIMEOUT",
+            `status output write did not complete within ${this.backpressureTimeoutMs}ms`,
+          ),
+        );
+      }, this.backpressureTimeoutMs),
+    };
+    this.#pendingWrites.add(pending);
+    return pending;
+  }
+
+  #settleWrite(pending: PendingWrite, error?: Error | null): void {
+    if (pending.settled) {
+      return;
+    }
+    if (error != null) {
+      // Node emits the matching error event after the write callback.
+      return;
+    }
+    pending.settled = true;
+    clearTimeout(pending.timer);
+    this.#pendingWrites.delete(pending);
+    if (this.#pendingWrites.size === 0) {
+      this.#resolveWrites?.();
+      this.#resolveWrites = undefined;
+      this.#writePromise = undefined;
+    }
   }
 
   #waitForDrain(): void {
@@ -417,6 +480,14 @@ export class OutputCoordinator {
   #storeError(error: LaquOutputError): void {
     this.#outputError ??= error;
     this.#clearPending();
+    for (const pending of this.#pendingWrites) {
+      pending.settled = true;
+      clearTimeout(pending.timer);
+    }
+    this.#pendingWrites.clear();
+    this.#resolveWrites?.();
+    this.#resolveWrites = undefined;
+    this.#writePromise = undefined;
   }
 
   #throwIfFailed(): void {

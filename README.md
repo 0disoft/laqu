@@ -215,6 +215,11 @@ unsupported backpressure contract, or buffer overflow becomes a sticky `LaquOutp
 by `flush()` and `close()`; output is never reported as successfully flushed after such a failure.
 Live rendering keeps only the latest screen frame while preserving queued scrollback.
 
+For Node.js `Writable` status streams, `flush()` and `close()` also wait for completion of the writes
+submitted by laqu. A write that does not complete within the output timeout reports
+`LAQU_OUTPUT_WRITE_TIMEOUT`. Custom `StreamTarget` implementations without Node's write callback
+retain the `write()` and `drain` contract; laqu does not close caller-owned streams.
+
 ```ts
 import { LaquOutputError } from "@0disoft/laqu";
 
