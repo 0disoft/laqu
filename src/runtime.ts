@@ -149,13 +149,16 @@ class LaquRuntime implements ProgressRuntime {
 
     const handle = this.#createRootHandle(title, options, true);
     this.#activeScopedTasks += 1;
+    let result!: Awaited<T>;
+    let callbackFailure: { error: unknown } | undefined;
+    let cleanupFailure: { error: unknown } | undefined;
     try {
-      const result = await this.#taskCloseContext.run(handle, () => callback(handle));
+      result = await this.#taskCloseContext.run(handle, () => callback(handle));
       if (this.#acceptsHandleMutation(true)) {
         handle.succeed();
       }
-      return result;
     } catch (error) {
+      callbackFailure = { error };
       if (this.#acceptsHandleMutation(true)) {
         if (options.signal?.aborted === true) {
           this.store.forceTerminalUpdate(handle.id, { status: "cancelled", message: "aborted" });
@@ -165,7 +168,6 @@ class LaquRuntime implements ProgressRuntime {
         }
         this.markDirty(true);
       }
-      throw error;
     } finally {
       handle.dispose();
       this.#activeScopedTasks -= 1;
@@ -174,12 +176,27 @@ class LaquRuntime implements ProgressRuntime {
         this.#resolveScopedTasksDrained = undefined;
         this.#scopedTasksDrained = undefined;
       }
-      await this.flush();
+      try {
+        await this.flush();
+      } catch (error) {
+        cleanupFailure = { error };
+      }
       if (this.#closeRequestedByScopedTask && this.#activeScopedTasks === 0) {
         this.#closeRequestedByScopedTask = false;
-        await this.#gracefulClosePromise;
+        try {
+          await this.#gracefulClosePromise;
+        } catch (error) {
+          cleanupFailure ??= { error };
+        }
       }
     }
+    if (callbackFailure !== undefined) {
+      throw callbackFailure.error;
+    }
+    if (cleanupFailure !== undefined) {
+      throw cleanupFailure.error;
+    }
+    return result;
   }
 
   createTask(title: string, options: TaskOptions = {}): TaskHandle {

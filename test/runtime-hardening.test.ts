@@ -116,6 +116,25 @@ test("automatic flush does not leak unhandled rejections when status writes fail
   strictEqual(unhandled, undefined);
 });
 
+test("scoped callback failure keeps its original error when status output also fails", async () => {
+  const runtime = createLaqu({ stderr: new ThrowingStream(), env: {}, streamCapability: "pipe" });
+  const original = new Error("application failure");
+
+  await rejects(
+    runtime.task("failing work", () => {
+      throw original;
+    }),
+    (error) => {
+      strictEqual(error, original);
+      return true;
+    },
+  );
+  await rejects(runtime.close(), {
+    name: "LaquOutputError",
+    code: "LAQU_OUTPUT_WRITE_FAILED",
+  });
+});
+
 test("pending drain listeners are cleaned up when replayed output write fails", async () => {
   const stream = new BackpressureThenThrowStream();
   const output = new OutputCoordinator(stream, nullRenderer, false);
