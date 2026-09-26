@@ -39,7 +39,8 @@ their task and are detached during cleanup.
 
 - Maintainability: changes must preserve source-of-truth documents.
 - Safety: ordinary text cannot inject terminal control sequences; raw ANSI is explicitly dangerous.
-- Boundedness: retention, row limits, flush rate, and backpressure waits are bounded.
+- Boundedness: retention counts, row limits, flush rate, and backpressure waits are bounded;
+  individual record and frame byte sizes are not capped.
 - Compatibility: Node.js, ESM, public imports, and event versions follow the library contracts.
 - Recovery: cursor state, listeners, and live leases are released on normal close and best-effort
   process lifecycle cleanup.

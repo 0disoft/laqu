@@ -13,7 +13,8 @@ metadata, and release behavior:
 - Task terminal states are not overwritten by ordinary updates.
 - Scoped callback failures preserve the original rejection and task cleanup still runs.
 - Public text is sanitized; raw ANSI requires the named dangerous API.
-- Retained output state and backpressure waits remain bounded.
+- Retained output record counts and backpressure wait times remain bounded; an individual record's
+  byte size is caller-controlled.
 - Event schemas are versioned and JSON output remains parseable.
 - Public exports, declarations, consumer fixtures, README, and compatibility documentation move
   together.

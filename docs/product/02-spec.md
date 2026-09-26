@@ -43,8 +43,9 @@ package documentation must preserve.
 - Logs pass through the output coordinator so they cannot corrupt the live region.
 - Plain and JSON frames remain ordered under backpressure; live frames use latest-screen-wins while
   preserving scrollback.
-- Pending output is bounded to 4096 frames. Timeout, write failure, unsupported drain semantics,
-  stream termination, and overflow remain sticky and observable from `flush()` and `close()` as
+- Pending output is bounded to 4096 frames by count, not total bytes. Timeout, write failure,
+  unsupported drain semantics, stream termination, and overflow remain sticky and observable from
+  `flush()` and `close()` as
   `LaquOutputError`.
 - Cleanup restores cursor state and releases stream ownership even after an output failure.
 
