@@ -58,7 +58,7 @@ As a library, this repository owns public API surface, package compatibility, se
 ## Validation
 
 - Use VALIDATION.md for stable validation names.
-- In this workspace, the configured mustflow verification intent is `laqu_check`.
+- Run relevant validation commands directly from package scripts, repository tooling, or CI. Workspace command registration is not required.
 - When working directly inside this repository, `bun run check` is the equivalent package-level verification and covers typecheck, lint, format check, tests, and build.
 - Use `bun run pack:check` for package artifact or public export surface changes.
 
