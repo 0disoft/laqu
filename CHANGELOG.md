@@ -3,6 +3,16 @@
 Notable user-facing changes to `@0disoft/laqu` are recorded here. The project follows
 [Semantic Versioning](docs/library/semver.md).
 
+## [Unreleased]
+
+### Fixed
+
+- Kept active scoped task records until their callbacks settle, so terminal-record pruning cannot
+  replace a late callback failure with `Unknown task id` or leave the summary counting it as a
+  success. Normal retention resumes after the callback settles.
+- Read error messages once and tolerate throwing prototype checks, preserving original scoped
+  failures and terminal status when a caller throws an unusual object or revoked Proxy.
+
 ## [2.0.0] - 2026-09-27
 
 ### Added

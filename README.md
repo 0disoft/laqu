@@ -111,6 +111,14 @@ await progress.close();
 
 Scoped tasks mark themselves as succeeded when the callback resolves. If the callback throws, the task is marked failed and the original error is rethrown. If the task receives an aborted `AbortSignal`, it is marked cancelled and cleanup still runs.
 
+Calling `task.succeed()` inside a scoped callback does not end the callback's lifetime. Its record
+stays available until the callback settles, even with `retention.maxTerminalTasks: 0`, so a later
+callback failure can correct the task status and summary without replacing the original error.
+Once the callback settles, its record follows the normal retention policy again.
+
+Error messages are read once. If an error object cannot be inspected safely, progress uses a
+generic message while the scoped task still rethrows the original value.
+
 ## Manual Tasks
 
 ```ts
