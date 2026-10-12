@@ -95,6 +95,7 @@ type TaskNodeUpdate = Partial<
 
 export class TaskStore {
   readonly #tasks = new Map<string, TaskNode>();
+  readonly #activeScopes = new Set<string>();
   readonly #rootIds = new Set<string>();
   readonly #logs: LogRecord[] = [];
   readonly #pendingTerminalSnapshots: string[] = [];
@@ -194,6 +195,17 @@ export class TaskStore {
     const previousStatus = node.status;
     applyUpdate(node, update);
     this.#recordStatusTransition(node.id, previousStatus, node.status);
+  }
+
+  retainForScope(id: string): void {
+    this.#requireNode(id);
+    this.#activeScopes.add(id);
+  }
+
+  releaseScope(id: string): void {
+    if (this.#activeScopes.delete(id)) {
+      this.#enqueuePruneCandidate(this.#requireNode(id));
+    }
   }
 
   getProgress(id: string): ProgressState {
@@ -391,7 +403,12 @@ export class TaskStore {
         continue;
       }
       node.pruneCandidateQueued = false;
-      if (!node.snapshottedTerminal || !isTerminalStatus(node.status) || node.children.size > 0) {
+      if (
+        this.#activeScopes.has(id) ||
+        !node.snapshottedTerminal ||
+        !isTerminalStatus(node.status) ||
+        node.children.size > 0
+      ) {
         continue;
       }
       this.#removeTaskNode(node);

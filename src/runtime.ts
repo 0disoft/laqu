@@ -169,6 +169,7 @@ class LaquRuntime implements ProgressRuntime {
         this.markDirty(true);
       }
     } finally {
+      this.store.releaseScope(handle.id);
       handle.dispose();
       this.#activeScopedTasks -= 1;
       if (this.#activeScopedTasks === 0) {
@@ -405,7 +406,15 @@ class LaquRuntime implements ProgressRuntime {
     this.#assertOpen();
     const id = this.store.createTask(title, options);
     const handle = this.#createHandle(id, allowDuringDrain);
-    handle.bindSignal(options.signal);
+    if (allowDuringDrain) {
+      this.store.retainForScope(id);
+    }
+    try {
+      handle.bindSignal(options.signal);
+    } catch (error) {
+      this.store.releaseScope(id);
+      throw error;
+    }
     this.markDirty(true);
     return handle;
   }
