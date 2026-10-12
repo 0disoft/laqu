@@ -832,9 +832,10 @@ function unknownToMessage(error: unknown): string | undefined {
   if (error === undefined) {
     return undefined;
   }
-  if (error instanceof Error) {
+  if (isError(error)) {
     try {
-      return typeof error.message === "string" ? error.message : "Error";
+      const message = error.message;
+      return typeof message === "string" ? message : "Error";
     } catch {
       return "Error";
     }
@@ -857,7 +858,7 @@ function unknownToMessage(error: unknown): string | undefined {
 }
 
 export function unknownToRejectionError(reason: unknown): Error {
-  if (reason instanceof Error) {
+  if (isError(reason)) {
     return reason;
   }
   const message = unknownToMessage(reason);
@@ -867,6 +868,15 @@ export function unknownToRejectionError(reason: unknown): Error {
       : `Unhandled promise rejection: ${message}`,
     { cause: reason },
   );
+}
+
+function isError(value: unknown): value is Error {
+  try {
+    return value instanceof Error;
+  } catch {
+    // A revoked Proxy or a throwing prototype trap must not replace the failure.
+    return false;
+  }
 }
 
 function acquireStatusStreamLease(stream: StreamTarget): StatusStreamLease | undefined {
