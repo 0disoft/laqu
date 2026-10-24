@@ -202,7 +202,7 @@ export function wrapToColumns(
       continue;
     }
 
-    for (const cluster of graphemes(token.value)) {
+    for (const { segment: cluster } of segmenter.segment(token.value)) {
       if (cluster === "\n") {
         lines.push(current);
         current = "";

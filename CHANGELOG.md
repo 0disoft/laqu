@@ -7,6 +7,8 @@ Notable user-facing changes to `@0disoft/laqu` are recorded here. The project fo
 
 ### Fixed
 
+- Removed the eager grapheme array from line wrapping, reducing temporary allocations when live
+  failure diagnostics or callers wrap long strings without changing the rendered text.
 - Recalculated tab stops after wrapping and split oversized tab expansions across bounded lines,
   preserving ANSI sequences, wide graphemes, consecutive tabs, and explicit newlines.
 - Kept standalone indeterminate symbols consistent between compact and ledger layouts without

@@ -379,6 +379,8 @@ ANSI/control sequences are tokenized as zero-width. Text is segmented by graphem
 `wrapToColumns()` recalculates a tab's stop from column zero when that tab moves to a new line.
 If the expanded tab is wider than a line, its spaces are split across lines within the column
 budget. ANSI sequences, grapheme boundaries, and explicit newlines remain intact.
+Wrapping consumes graphemes incrementally, without an intermediate array containing every
+grapheme. The returned lines and input text still require memory proportional to their size.
 
 ## Child Process Output
 

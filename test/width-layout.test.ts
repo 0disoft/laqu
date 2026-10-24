@@ -189,6 +189,28 @@ test("wrap respects column width without relying on terminal autowrap", () => {
   deepStrictEqual(wrapToColumns("abc\tz", 8, { tabSize: 8 }), ["abc     ", "z"]);
 });
 
+for (const { name, input } of [
+  { name: "ASCII", input: "x".repeat(100_000) },
+  { name: "styled graphemes", input: `\u001b[31m${"👩‍💻e\u0301".repeat(10_000)}\u001b[0m` },
+]) {
+  test(`long ${name} wrapping preserves all text and bounded line widths`, () => {
+    const lines = wrapToColumns(input, 80);
+    strictEqual(lines.join(""), input);
+    strictEqual(
+      lines.every((line) => displayWidth(line) <= 80),
+      true,
+    );
+    if (name === "styled graphemes") {
+      strictEqual(
+        lines.every((line) =>
+          graphemes(stripAnsi(line)).every((cluster) => cluster === "👩‍💻" || cluster === "e\u0301"),
+        ),
+        true,
+      );
+    }
+  });
+}
+
 test("a wrapped tab restarts its stop and splits spaces within the line budget", () => {
   deepStrictEqual(wrapToColumns("a\t", 2, { tabSize: 8 }), ["a", "  ", "  ", "  ", "  "]);
   deepStrictEqual(wrapToColumns("a\t", 3, { tabSize: 8 }), ["a", "   ", "   ", "  "]);
