@@ -31,6 +31,11 @@ running tasks, `○` for pending tasks, and `█` / `░` for progress; theme ov
 The summary uses actual task states, including completed tasks removed by retention. A caller message
 such as `waiting` does not change a running task's lifecycle state.
 
+Failed tasks take priority over active and successful tasks when rows are limited. Live output also
+records each failure's full title, message, and detail in scrollback, wrapped to terminal width.
+Unchanged failure diagnostics are emitted once; a changed cause produces a new diagnostic, and
+later screen redraws or task retention do not erase already-written scrollback.
+
 The live header displays the package version, for example `laqu 2.0.0`. Builds embed the version from
 `package.json`, so bundled CLIs do not need Laqu's package files at runtime to display it.
 Interactive human output on the default stderr checks npm's public registry for a newer stable
@@ -242,7 +247,7 @@ By default:
 - human live rendering is enabled only when the status stream is a TTY and the environment is not CI.
 - one runtime owns a status stream at a time. Creating another runtime with the same stream before the first closes throws `LAQU_OUTPUT_STREAM_IN_USE`; share a runtime's task tree or supply separate streams.
 - CI, pipe, dumb terminal, and non-TTY output fall back to plain append rendering unless a different policy is requested.
-- plain append rendering preserves task creation and terminal transitions and full sanitized text for retained logs; frequent progress changes may be combined. `maxRows` and terminal-width truncation apply only to live rendering. Live rendering prioritizes active tasks, never exceeds the configured or available terminal rows, and redraws from current terminal dimensions when the status stream emits `resize`.
+- plain append rendering preserves task creation and terminal transitions and full sanitized text for retained logs; frequent progress changes may be combined. `maxRows` and terminal-width truncation apply only to live rendering. Live rendering prioritizes failed tasks followed by active tasks, never exceeds the configured or available terminal rows, and redraws from current terminal dimensions when the status stream emits `resize`.
 - JSON/NDJSON progress events do not go to stdout unless the caller explicitly passes a separate status stream that points there.
 
 ```ts

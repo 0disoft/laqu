@@ -7,6 +7,8 @@ Notable user-facing changes to `@0disoft/laqu` are recorded here. The project fo
 
 ### Fixed
 
+- Prioritized failed live tasks and preserved full failure diagnostics in scrollback once per
+  changed cause, even when the live row budget or terminal-task retention hides their rows.
 - Preserved successful scoped callback results when automatic output flushing or deferred close
   fails. Explicit `flush()` and `close()` still report the sticky output error.
 - Cancelled signal-bound manual tasks safely while close drains scoped callbacks, without an

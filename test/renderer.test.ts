@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { AnsiLiveRenderer, JsonEventRenderer, PlainLogRenderer } from "../src/renderer.js";
 import { compileTheme } from "../src/theme.js";
+import { TaskStore } from "../src/task-store.js";
 import type {
   AggregateProgress,
   ProgressState,
@@ -14,6 +15,70 @@ import { displayWidth, stripAnsi } from "../src/width.js";
 const theme = compileTheme({ useColor: false });
 const noneProgress: ProgressState = { kind: "none" };
 const noneAggregate: AggregateProgress = { kind: "none" };
+
+test("late failures stay visible and are recorded once in live scrollback", () => {
+  const store = new TaskStore({ maxTerminalTasks: 0 });
+  for (let index = 0; index < 10; index += 1) {
+    store.update(store.createTask(`success-${index}`), { status: "succeeded" });
+  }
+  const id = store.createTask("deployment");
+  store.update(id, { status: "failed", message: "permission denied /deploy" });
+  const renderer = new AnsiLiveRenderer(theme, 100, 12);
+  const first = renderer.render(store.snapshot());
+  if (first.kind !== "live") throw new Error("expected live frame");
+  strictEqual(
+    first.lines.some((line) => line.includes("permission denied /deploy")),
+    true,
+  );
+  deepStrictEqual(first.scrollbackLines, ["× deployment permission denied /deploy"]);
+  const repeated = renderer.render(store.snapshot());
+  if (repeated.kind !== "live") throw new Error("expected live frame");
+  deepStrictEqual(repeated.scrollbackLines, []);
+  const pruned = renderer.render(store.snapshot());
+  if (pruned.kind !== "live") throw new Error("expected live frame");
+  deepStrictEqual(pruned.scrollbackLines, []);
+  strictEqual(pruned.lines.length, 0);
+});
+
+test("live failures outrank active rows and preserve all diagnostics beyond the row budget", () => {
+  const store = new TaskStore();
+  store.createTask("still running");
+  for (let index = 0; index < 3; index += 1) {
+    store.update(store.createTask(`failed-${index}`), {
+      status: "failed",
+      message: `permission denied ${index}`,
+    });
+  }
+  const frame = new AnsiLiveRenderer(theme, 100, 1).render(store.snapshot());
+  if (frame.kind !== "live") throw new Error("expected live frame");
+  strictEqual(frame.lines.length, 1);
+  strictEqual(frame.lines[0]?.includes("failed-0"), true);
+  strictEqual(frame.scrollbackLines.length, 3);
+  strictEqual(frame.scrollbackLines[2]?.includes("permission denied 2"), true);
+});
+
+test("live failure diagnostics wrap safely and report changed causes only once", () => {
+  const store = new TaskStore();
+  const id = store.createTask("unsafe\u001b[2Jtitle");
+  const message = "permission denied /deploy/" + "x".repeat(100);
+  store.update(id, { status: "failed", message });
+  const renderer = new AnsiLiveRenderer(theme, 12, 2);
+  const first = renderer.render(store.snapshot());
+  if (first.kind !== "live") throw new Error("expected live frame");
+  strictEqual(
+    first.scrollbackLines.every((line) => displayWidth(line) <= 12),
+    true,
+  );
+  strictEqual(first.scrollbackLines.join("").includes(message), true);
+  strictEqual(first.scrollbackLines.join("").includes("\u001b[2J"), false);
+  store.forceTerminalUpdate(id, { status: "failed", message: "final failure" });
+  const changed = renderer.render(store.snapshot());
+  if (changed.kind !== "live") throw new Error("expected live frame");
+  strictEqual(changed.scrollbackLines.join("").includes("final failure"), true);
+  const repeated = renderer.render(store.snapshot());
+  if (repeated.kind !== "live") throw new Error("expected live frame");
+  deepStrictEqual(repeated.scrollbackLines, []);
+});
 
 test("plain renderer prunes task states after tasks leave the snapshot", () => {
   const renderer = new PlainLogRenderer(theme, 80, 10);

@@ -2,7 +2,7 @@ import { logEvent, summaryEvent, taskEvent, type LaquEvent } from "./events.js";
 import { packageVersion } from "./package-info.js";
 import { renderSegments, text, type CompiledTheme } from "./theme.js";
 import type { OutputFormat, ProgressPolicy, StreamCapability } from "./types.js";
-import { displayWidth, sanitizeText, truncateToColumns } from "./width.js";
+import { displayWidth, sanitizeText, truncateToColumns, wrapToColumns } from "./width.js";
 import type { LogRecord, RuntimeSnapshot, TaskSnapshot, TaskStatus } from "./task-store.js";
 
 export type Frame =
@@ -75,6 +75,7 @@ export function chooseRenderer(options: RendererOptions): RendererDecision {
 
 export class AnsiLiveRenderer implements Renderer {
   #seenLogSequence = 0;
+  readonly #seenFailures = new Map<string, string>();
 
   constructor(
     private readonly theme: CompiledTheme,
@@ -85,14 +86,29 @@ export class AnsiLiveRenderer implements Renderer {
   render(snapshot: RuntimeSnapshot): Frame {
     const columns = resolveLayoutValue(this.columns);
     const maxRows = resolveLayoutValue(this.maxRows);
+    const rows = flattenTasks(snapshot.tasks);
     const newLogs = logsAfterSequence(snapshot.logs, this.#seenLogSequence);
     const scrollbackLines = renderLogLines(newLogs, this.theme, columns);
     this.#seenLogSequence = lastLogSequence(snapshot.logs, this.#seenLogSequence);
+    const failures = rows.filter((task) => task.status === "failed");
+    pruneSeenTaskStates(this.#seenFailures, failures);
+    for (const task of failures) {
+      const state = JSON.stringify([task.title, task.message, task.detail]);
+      if (this.#seenFailures.get(task.id) === state) continue;
+      this.#seenFailures.set(task.id, state);
+      for (const line of wrapToColumns(
+        renderTaskRow(task, this.theme),
+        columns,
+        this.theme.tokens,
+      )) {
+        scrollbackLines.push(line);
+      }
+    }
 
     return {
       kind: "live",
       scrollbackLines,
-      lines: rowsForSnapshot(snapshot, this.theme, columns, maxRows),
+      lines: rowsForSnapshot(snapshot, this.theme, columns, maxRows, rows),
     };
   }
 }
@@ -215,9 +231,9 @@ function rowsForSnapshot(
   theme: CompiledTheme,
   columns: number,
   maxRows: number,
+  rows: readonly TaskSnapshot[],
 ): string[] {
-  const rows = flattenTasks(snapshot.tasks);
-  const prioritized = prioritizeActiveTasks(rows);
+  const prioritized = prioritizeTasks(rows);
   if (rows.length === 0) {
     return [];
   }
@@ -376,17 +392,20 @@ function ledgerSummary(
     .join(" · ");
 }
 
-function prioritizeActiveTasks(tasks: readonly TaskSnapshot[]): TaskSnapshot[] {
+function prioritizeTasks(tasks: readonly TaskSnapshot[]): TaskSnapshot[] {
+  const failed: TaskSnapshot[] = [];
   const active: TaskSnapshot[] = [];
   const terminal: TaskSnapshot[] = [];
   for (const task of tasks) {
-    if (task.status === "pending" || task.status === "running") {
+    if (task.status === "failed") {
+      failed.push(task);
+    } else if (task.status === "pending" || task.status === "running") {
       active.push(task);
     } else {
       terminal.push(task);
     }
   }
-  return [...active, ...terminal];
+  return [...failed, ...active, ...terminal];
 }
 
 function resolveLayoutValue(value: number | (() => number)): number {
