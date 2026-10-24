@@ -98,6 +98,7 @@ export class TaskStore {
   readonly #activeScopes = new Set<string>();
   readonly #rootIds = new Set<string>();
   readonly #logs: LogRecord[] = [];
+  #logHead = 0;
   readonly #pendingTerminalSnapshots: string[] = [];
   readonly #pruneCandidates: string[] = [];
   readonly #maxLogs: number;
@@ -223,11 +224,12 @@ export class TaskStore {
       return;
     }
     const log = { message, createdAt: Date.now(), sequence: this.#nextLogSequence };
-    this.#logs.push(log);
     this.#nextLogSequence += 1;
-    const excess = this.#logs.length - this.#maxLogs;
-    if (excess > 0) {
-      this.#logs.splice(0, excess);
+    if (this.#logs.length < this.#maxLogs) {
+      this.#logs.push(log);
+    } else {
+      this.#logs[this.#logHead] = log;
+      this.#logHead = (this.#logHead + 1) % this.#maxLogs;
     }
     if (this.#recordOutput) {
       this.#appendOutput({ kind: "log", log });
@@ -237,7 +239,7 @@ export class TaskStore {
   snapshot(): RuntimeSnapshot {
     const snapshot = {
       tasks: this.#snapshotTasks(),
-      logs: [...this.#logs],
+      logs: this.#snapshotLogs(),
       summary: { ...this.#summaryCounts },
       createdAt: Date.now(),
       ...(this.#recordOutput
@@ -269,6 +271,20 @@ export class TaskStore {
       pendingTerminalSnapshots: this.#pendingTerminalSnapshots.length,
       pendingPruneCandidates: this.#pruneCandidates.length - this.#pruneCandidateHead,
     };
+  }
+
+  #snapshotLogs(): LogRecord[] {
+    if (this.#logHead === 0) {
+      return [...this.#logs];
+    }
+    const logs: LogRecord[] = [];
+    for (let offset = 0; offset < this.#logs.length; offset += 1) {
+      const log = this.#logs[(this.#logHead + offset) % this.#logs.length];
+      if (log !== undefined) {
+        logs.push(log);
+      }
+    }
+    return logs;
   }
 
   #snapshotTasks(rootIds: readonly string[] = [...this.#rootIds]): readonly TaskSnapshot[] {
@@ -370,7 +386,7 @@ export class TaskStore {
     }
     const maxPendingRecords = 4_096;
     if (this.#outputRecords.length >= maxPendingRecords) {
-      const oldestRetainedLog = this.#logs[0]?.sequence ?? Number.POSITIVE_INFINITY;
+      const oldestRetainedLog = this.#logs[this.#logHead]?.sequence ?? Number.POSITIVE_INFINITY;
       this.#outputRecords = this.#outputRecords.filter(
         (entry) => entry.kind === "task" || entry.log.sequence >= oldestRetainedLog,
       );
@@ -383,7 +399,7 @@ export class TaskStore {
   }
 
   #drainOutputRecords(): OutputRecord[] {
-    const oldestRetainedLog = this.#logs[0]?.sequence ?? Number.POSITIVE_INFINITY;
+    const oldestRetainedLog = this.#logs[this.#logHead]?.sequence ?? Number.POSITIVE_INFINITY;
     const records = this.#outputRecords.filter(
       (entry) => entry.kind === "task" || entry.log.sequence >= oldestRetainedLog,
     );

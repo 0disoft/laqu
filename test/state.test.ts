@@ -160,6 +160,58 @@ test("zero log retention drops log records", () => {
   strictEqual(store.snapshot().logs.length, 0);
 });
 
+for (const maxLogs of [1, 3]) {
+  test(`log retention preserves order and prior snapshots across repeated windows (${maxLogs})`, () => {
+    const store = new TaskStore({ maxLogs });
+    const retainedSnapshots = [];
+    for (let sequence = 1; sequence <= 20; sequence += 1) {
+      store.addLog(`log-${sequence}`);
+      const logs = store.snapshot().logs;
+      const expected = Array.from(
+        { length: Math.min(sequence, maxLogs) },
+        (_, offset) => Math.max(1, sequence - maxLogs + 1) + offset,
+      );
+      deepStrictEqual(
+        logs.map((log) => log.sequence),
+        expected,
+      );
+      deepStrictEqual(
+        logs.map((log) => log.message),
+        expected.map((id) => `log-${id}`),
+      );
+      retainedSnapshots.push({ logs, expected });
+    }
+    for (const { logs, expected } of retainedSnapshots) {
+      deepStrictEqual(
+        logs.map((log) => log.sequence),
+        expected,
+      );
+    }
+  });
+}
+
+test("log retention filters pending output across repeated windows and record compaction", () => {
+  const store = new TaskStore({ maxLogs: 3, recordOutput: true });
+  const id = store.createTask("retained transition");
+  for (let sequence = 1; sequence <= 5_000; sequence += 1) {
+    store.addLog(`log-${sequence}`);
+    if (sequence === 2_000) store.update(id, { status: "succeeded" });
+  }
+  const snapshot = store.snapshot();
+  strictEqual(snapshot.outputOverflowed, false);
+  deepStrictEqual(
+    snapshot.logs.map((log) => log.sequence),
+    [4_998, 4_999, 5_000],
+  );
+  deepStrictEqual(
+    snapshot.outputRecords?.map((record) =>
+      record.kind === "task" ? record.task.status : record.log.sequence,
+    ),
+    ["running", "succeeded", 4_998, 4_999, 5_000],
+  );
+  deepStrictEqual(store.snapshot().outputRecords, []);
+});
+
 test("task creation rejects invalid log retention limits", () => {
   throws(() => new TaskStore({ maxLogs: -1 }), {
     name: "TypeError",
