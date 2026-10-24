@@ -143,6 +143,10 @@ await progress.close();
 
 Scoped tasks mark themselves as succeeded when the callback resolves. If the callback throws, the task is marked failed and the original error is rethrown. If the task receives an aborted `AbortSignal`, it is marked cancelled and cleanup still runs.
 
+`task()` preserves the callback's result even when its automatic status flush or deferred close
+fails with `LaquOutputError`. Delivery errors remain sticky: explicitly await `flush()` or `close()`
+to observe them. An explicit delivery check inside the callback can still reject that callback.
+
 Calling `task.succeed()` inside a scoped callback does not end the callback's lifetime. Its record
 stays available until the callback settles, even with `retention.maxTerminalTasks: 0`, so a later
 callback failure can correct the task status and summary without replacing the original error.

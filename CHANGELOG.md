@@ -7,6 +7,8 @@ Notable user-facing changes to `@0disoft/laqu` are recorded here. The project fo
 
 ### Fixed
 
+- Preserved successful scoped callback results when automatic output flushing or deferred close
+  fails. Explicit `flush()` and `close()` still report the sticky output error.
 - Cancelled signal-bound manual tasks safely while close drains scoped callbacks, without an
   uncaught exception or relaxing the restriction on caller mutations during shutdown.
 - Kept active scoped task records until their callbacks settle, so terminal-record pruning cannot

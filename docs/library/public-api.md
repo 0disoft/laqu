@@ -23,6 +23,9 @@ This repository type owns public API surface, package compatibility, semantic ve
 
 The package root exports `LaquOutputError` and `LaquOutputErrorCode` so callers can distinguish
 status-output delivery failure from application task failure.
+`task()` preserves a successful callback's return value when automatic output cleanup fails with
+`LaquOutputError`; explicit `flush()` and `close()` still reject that same sticky output failure.
+Errors explicitly awaited inside the callback remain part of the callback's result contract.
 Task events expose aggregate `progress` and direct `ownProgress`; the latter retains `current` and
 `total` for determinate tasks or `current` for counters.
 

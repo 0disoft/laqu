@@ -195,14 +195,14 @@ class LaquRuntime implements ProgressRuntime {
       try {
         await this.flush();
       } catch (error) {
-        cleanupFailure = { error };
+        if (!(error instanceof LaquOutputError)) cleanupFailure = { error };
       }
       if (this.#closeRequestedByScopedTask && this.#activeScopedTasks === 0) {
         this.#closeRequestedByScopedTask = false;
         try {
           await this.#gracefulClosePromise;
         } catch (error) {
-          cleanupFailure ??= { error };
+          if (!(error instanceof LaquOutputError)) cleanupFailure ??= { error };
         }
       }
     }

@@ -206,6 +206,52 @@ test("scoped callback failure keeps its original error when status output also f
   });
 });
 
+test("successful scoped work keeps its result when status output fails", async () => {
+  const runtime = createLaqu({ stderr: new ThrowingStream(), env: {}, streamCapability: "pipe" });
+  const expected = { committed: true };
+  let calls = 0;
+  const result = await runtime.task("commit", () => {
+    calls += 1;
+    return expected;
+  });
+  strictEqual(result, expected);
+  strictEqual(calls, 1);
+  await rejects(runtime.flush(), { code: "LAQU_OUTPUT_WRITE_FAILED" });
+  await rejects(runtime.close(), { code: "LAQU_OUTPUT_WRITE_FAILED" });
+});
+
+test("successful scoped work keeps its result when deferred close output fails", async () => {
+  let fail = false;
+  const runtime = createLaqu({
+    statusStream: {
+      write() {
+        if (fail) throw new Error("broken output");
+        return true;
+      },
+    },
+    streamCapability: "pipe",
+  });
+  const result = await runtime.task("commit then close", async () => {
+    await runtime.close();
+    fail = true;
+    return 123;
+  });
+  strictEqual(result, 123);
+  await rejects(runtime.close(), { code: "LAQU_OUTPUT_WRITE_FAILED" });
+});
+
+test("an explicit flush failure inside a callback remains its rejection", async () => {
+  const runtime = createLaqu({ stderr: new ThrowingStream(), env: {}, streamCapability: "pipe" });
+  await rejects(
+    runtime.task("explicit delivery", async () => {
+      await runtime.flush();
+      return 123;
+    }),
+    { code: "LAQU_OUTPUT_WRITE_FAILED" },
+  );
+  await rejects(runtime.close(), { code: "LAQU_OUTPUT_WRITE_FAILED" });
+});
+
 test("pending drain listeners are cleaned up when replayed output write fails", async () => {
   const stream = new BackpressureThenThrowStream();
   const output = new OutputCoordinator(stream, nullRenderer, false);
