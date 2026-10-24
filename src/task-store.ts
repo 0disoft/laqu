@@ -739,30 +739,41 @@ function requireSnapshot(snapshots: ReadonlyMap<string, TaskSnapshot>, id: strin
 }
 
 function applyUpdate(node: TaskNode, update: TaskNodeUpdate): void {
-  if (update.title !== undefined) {
-    assertString(update.title, "title");
-    node.title = update.title;
+  const { title, status, progress, weight } = update;
+  const hasMessage = Object.hasOwn(update, "message");
+  const hasDetail = Object.hasOwn(update, "detail");
+  const message = hasMessage ? update.message : undefined;
+  const detail = hasDetail ? update.detail : undefined;
+
+  // Reject the whole update before mutating fields or lifecycle bookkeeping.
+  if (title !== undefined) {
+    assertString(title, "title");
   }
-  if (update.status !== undefined) {
-    node.status = update.status;
+  if (message !== undefined) {
+    assertString(message, "message");
   }
-  if (update.progress !== undefined) {
-    node.progress = update.progress;
+  if (detail !== undefined) {
+    assertString(detail, "detail");
   }
-  if (Object.hasOwn(update, "message")) {
-    if (update.message !== undefined) {
-      assertString(update.message, "message");
-    }
-    node.message = update.message;
+  const nextWeight = weight === undefined ? undefined : validatedWeight(weight);
+
+  if (title !== undefined) {
+    node.title = title;
   }
-  if (Object.hasOwn(update, "detail")) {
-    if (update.detail !== undefined) {
-      assertString(update.detail, "detail");
-    }
-    node.detail = update.detail;
+  if (status !== undefined) {
+    node.status = status;
   }
-  if (update.weight !== undefined) {
-    node.weight = validatedWeight(update.weight);
+  if (progress !== undefined) {
+    node.progress = progress;
+  }
+  if (hasMessage) {
+    node.message = message;
+  }
+  if (hasDetail) {
+    node.detail = detail;
+  }
+  if (nextWeight !== undefined) {
+    node.weight = nextWeight;
   }
   node.updatedAt = Date.now();
 }

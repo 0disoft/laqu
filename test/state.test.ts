@@ -397,6 +397,48 @@ test("task store rejects non-string public text fields", () => {
   });
 });
 
+for (const invalid of [{ message: 123 as never }, { detail: 123 as never }, { weight: -1 }]) {
+  test(`rejected ${Object.keys(invalid)[0]} updates preserve the entire task state`, () => {
+    const store = new TaskStore({ recordOutput: true, maxTerminalTasks: 0 });
+    const id = store.createTask("original", { total: 10, message: "before", detail: "before" });
+    const before = store.snapshot();
+
+    throws(
+      () =>
+        store.update(id, {
+          title: "changed",
+          status: "succeeded",
+          progress: ratioProgress(1),
+          message: "changed",
+          detail: "changed",
+          ...invalid,
+        }),
+      TypeError,
+    );
+    const after = store.snapshot();
+    deepStrictEqual(after.tasks, before.tasks);
+    deepStrictEqual(after.summary, before.summary);
+    deepStrictEqual(after.outputRecords, []);
+    strictEqual(store.retentionStats().retainedTerminalTasks, 0);
+  });
+}
+
+test("rejected forced terminal updates preserve the previous status and summary", () => {
+  const store = new TaskStore({ recordOutput: true });
+  const id = store.createTask("work");
+  store.update(id, { status: "succeeded" });
+  const before = store.snapshot();
+
+  throws(
+    () => store.forceTerminalUpdate(id, { status: "failed", message: 123 as never }),
+    TypeError,
+  );
+  const after = store.snapshot();
+  deepStrictEqual(after.tasks, before.tasks);
+  deepStrictEqual(after.summary, before.summary);
+  deepStrictEqual(after.outputRecords, []);
+});
+
 test("task creation rejects invalid terminal task retention limits", () => {
   throws(() => new TaskStore({ maxTerminalTasks: -1 }), {
     name: "TypeError",

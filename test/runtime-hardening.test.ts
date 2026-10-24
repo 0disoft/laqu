@@ -1,6 +1,7 @@
-import { rejects, strictEqual, throws } from "node:assert";
+import { deepStrictEqual, rejects, strictEqual, throws } from "node:assert";
 import test from "node:test";
 
+import type { LaquEvent } from "../src/events.js";
 import { createLaqu } from "../src/index.js";
 import { OutputCoordinator } from "../src/output-coordinator.js";
 import type { Renderer } from "../src/renderer.js";
@@ -95,6 +96,58 @@ test("runtime rejects invalid public option enums", () => {
       message: "streamCapability must be one of: tty, ci, pipe, dumb",
     },
   );
+});
+
+for (const method of ["succeed", "cancel", "skip"] as const) {
+  test(`an invalid ${method} message leaves the task recoverable`, async () => {
+    const stderr = new FakeStream();
+    const runtime = createLaqu({ stderr, env: {}, format: "json" });
+    try {
+      const task = runtime.createTask("work", { total: 2 });
+      throws(() => task[method](123 as never), TypeError);
+      task.advance(2);
+      task.succeed("recovered");
+    } finally {
+      await runtime.close();
+    }
+    const events = JSON.parse(stderr.chunks.join("")) as LaquEvent[];
+    const tasks = events.filter((event) => event.type === "task");
+    deepStrictEqual(
+      tasks.map((event) => event.task.status),
+      ["running", "succeeded"],
+    );
+    strictEqual(tasks.at(-1)?.task.message, "recovered");
+    deepStrictEqual(events.find((event) => event.type === "summary")?.tasks, {
+      total: 1,
+      running: 0,
+      succeeded: 1,
+      failed: 0,
+      cancelled: 0,
+      skipped: 0,
+    });
+  });
+}
+
+test("an invalid scoped terminal message is counted as exactly one failed task", async () => {
+  const stderr = new FakeStream();
+  const runtime = createLaqu({ stderr, env: {}, format: "json" });
+  try {
+    await rejects(
+      runtime.task("work", (task) => task.succeed(123 as never)),
+      TypeError,
+    );
+  } finally {
+    await runtime.close();
+  }
+  const events = JSON.parse(stderr.chunks.join("")) as LaquEvent[];
+  deepStrictEqual(events.find((event) => event.type === "summary")?.tasks, {
+    total: 1,
+    running: 0,
+    succeeded: 0,
+    failed: 1,
+    cancelled: 0,
+    skipped: 0,
+  });
 });
 
 test("automatic flush does not leak unhandled rejections when status writes fail", async () => {
