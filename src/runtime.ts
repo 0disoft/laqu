@@ -282,6 +282,11 @@ class LaquRuntime implements ProgressRuntime {
   }
 
   async #flushOnce(): Promise<void> {
+    if (this.policy === "silent" || this.policy === "never") {
+      this.store.pruneWithoutOutput();
+      await this.coordinator.flush();
+      return;
+    }
     do {
       if (this.#timer !== undefined) {
         clearTimeout(this.#timer);
@@ -299,12 +304,7 @@ class LaquRuntime implements ProgressRuntime {
       }
       this.coordinator.render(snapshot);
       await this.coordinator.flush();
-    } while (
-      this.#dirty &&
-      this.#state !== "closed" &&
-      this.policy !== "silent" &&
-      this.policy !== "never"
-    );
+    } while (this.#dirty && this.#state !== "closed");
   }
 
   #finalize(): Promise<void> {

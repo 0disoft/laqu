@@ -307,6 +307,8 @@ direct input: a `determinate` value includes `current` and `total`, while a `cou
 Human output shows `current/total` beside the bar for a standalone determinate task, or its current
 count without a percentage when no total is known. Parent task rows keep the child aggregate.
 Silent and never-output policies prune completed task records without waiting for an output snapshot.
+Their `flush()` calls apply retention and check sticky stream errors without constructing the
+task tree snapshot or a rendering frame. Scoped callbacks still preserve their results and errors.
 
 ```json
 {

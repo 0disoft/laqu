@@ -7,6 +7,8 @@ Notable user-facing changes to `@0disoft/laqu` are recorded here. The project fo
 
 ### Fixed
 
+- Skipped full task-tree snapshots during silent and never-output flushes while preserving
+  retention, scoped callback results, and explicit stream error reporting.
 - Removed the eager grapheme array from line wrapping, reducing temporary allocations when live
   failure diagnostics or callers wrap long strings without changing the rendered text.
 - Recalculated tab stops after wrapping and split oversized tab expansions across bounded lines,

@@ -74,6 +74,27 @@ const nullRenderer: Renderer = {
   render: () => ({ kind: "none" }),
 };
 
+for (const progressPolicy of ["silent", "never"] as const) {
+  test(`${progressPolicy} flush preserves stream failures without task output`, async () => {
+    const stream = new BackpressureThenThrowStream();
+    const runtime = createLaqu({ statusStream: stream, progressPolicy, checkForUpdates: false });
+    const expected = { completed: true };
+    strictEqual(await runtime.task("quiet work", () => expected), expected);
+    const controller = new AbortController();
+    runtime.createTask("cancelled quietly", { signal: controller.signal });
+    controller.abort();
+    await runtime.flush();
+    strictEqual(stream.chunks.length, 0);
+    stream.emit("error");
+    await rejects(runtime.flush(), { code: "LAQU_OUTPUT_WRITE_FAILED" });
+    await rejects(runtime.close(), { code: "LAQU_OUTPUT_WRITE_FAILED" });
+    strictEqual(stream.chunks.length, 0);
+    for (const event of ["error", "close", "finish"] as const) {
+      strictEqual(stream.listenerCount(event), 0);
+    }
+  });
+}
+
 for (const mode of ["root", "child"]) {
   test(`abort safely cancels a manual ${mode} while close drains scoped work`, () => {
     const result = spawnSync(

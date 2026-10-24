@@ -40,3 +40,26 @@ All six outputs contained 5,661 lines with SHA-256
 The removed intermediate array stored one entry for every grapheme: O(G) temporary entries
 become zero. Input and returned lines still require O(N) space, and wrapping still takes O(N)
 time for this corpus. Local medians are workload evidence rather than cross-platform guarantees.
+
+## Silent scoped tasks
+
+Run `bun run build` followed by `node benchmarks/silent-tasks.mjs`. Each policy gets three fresh
+processes, a 20-task warmup, and 3,000 sequential scoped callbacks with the default 1,000-terminal-task
+retention limit. The script verifies return-value sum `4498500` and zero writes. Its constant-time
+snapshot instrumentation counts snapshot calls and returned root task objects in this flat workload;
+it does not traverse the task tree or change retention.
+
+On Windows / Node.js 24.18.0, measured on 2026-10-25:
+
+| Policy   | Baseline median (ms) | Optimized median (ms) | Snapshot calls before → after | Task snapshot objects before → after |
+| -------- | -------------------: | --------------------: | ----------------------------: | -----------------------------------: |
+| `silent` |             794.0011 |               34.7989 |                      3002 → 1 |                       2502500 → 1000 |
+| `never`  |            1275.7118 |               33.8337 |                      3002 → 1 |                       2502500 → 1000 |
+
+Baseline commit: `39514df`. Raw times for `silent`: baseline `[794.0011, 792.4640, 879.4341]`,
+optimized `[38.4925, 34.7989, 30.8823]` ms. Raw times for `never`: baseline
+`[1159.1764, 1275.7118, 1321.7527]`, optimized `[33.8337, 43.7033, 33.1653]` ms.
+Every sample had the same counts and return-value sum. The remaining snapshot is taken once at
+finalization. Routine quiet flushes perform retention work and propagate sticky stream errors.
+For N sequential tasks and retention limit R, removed snapshot work was O(N × min(N, R));
+only O(min(N, R)) final snapshot work remains. Timings are local observations, not CI budgets.
