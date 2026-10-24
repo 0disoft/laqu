@@ -1,4 +1,6 @@
 import { deepStrictEqual, rejects, strictEqual, throws } from "node:assert";
+import { spawnSync } from "node:child_process";
+import { resolve } from "node:path";
 import test from "node:test";
 
 import type { LaquEvent } from "../src/events.js";
@@ -71,6 +73,22 @@ class BackpressureThenThrowStream implements StreamTarget {
 const nullRenderer: Renderer = {
   render: () => ({ kind: "none" }),
 };
+
+for (const mode of ["root", "child"]) {
+  test(`abort safely cancels a manual ${mode} while close drains scoped work`, () => {
+    const result = spawnSync(
+      process.execPath,
+      [resolve("test/fixtures/draining-abort.mjs"), mode],
+      {
+        encoding: "utf8",
+        timeout: 10_000,
+      },
+    );
+    strictEqual(result.status, 0, result.stderr);
+    strictEqual(result.stderr, "");
+    strictEqual(JSON.parse(result.stdout).cancelled, true);
+  });
+}
 
 test("runtime rejects invalid public option enums", () => {
   throws(() => createLaqu({ stderr: new FakeStream(), env: {}, format: "xml" as never }), {

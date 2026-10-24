@@ -7,6 +7,8 @@ Notable user-facing changes to `@0disoft/laqu` are recorded here. The project fo
 
 ### Fixed
 
+- Cancelled signal-bound manual tasks safely while close drains scoped callbacks, without an
+  uncaught exception or relaxing the restriction on caller mutations during shutdown.
 - Kept active scoped task records until their callbacks settle, so terminal-record pruning cannot
   replace a late callback failure with `Unknown task id` or leave the summary counting it as a
   success. Normal retention resumes after the callback settles.

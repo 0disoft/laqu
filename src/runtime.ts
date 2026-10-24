@@ -551,7 +551,8 @@ class StoreTaskHandle implements TaskHandle {
       this.cancel("aborted");
       return;
     }
-    const onAbort = () => this.cancel("aborted");
+    // Abort is an internal lifecycle transition, including while close drains work.
+    const onAbort = () => this.forceCancel("aborted");
     signal.addEventListener("abort", onAbort, { once: true });
     this.#abortCleanup = () => signal.removeEventListener("abort", onAbort);
   }
@@ -565,12 +566,16 @@ class StoreTaskHandle implements TaskHandle {
     this.onDispose();
   }
 
-  forceCancel(): void {
+  forceCancel(message?: string): void {
     if (this.#disposed) {
       return;
     }
-    this.store.forceTerminalUpdate(this.id, { status: "cancelled" });
+    this.store.forceTerminalUpdate(this.id, {
+      status: "cancelled",
+      ...(message === undefined ? {} : { message }),
+    });
     this.dispose();
+    this.onChange(true);
   }
 
   setTotal(total: number): void {

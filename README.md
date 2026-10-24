@@ -180,6 +180,9 @@ task handle updates. Scoped task callbacks that were already running may finish 
 unfinished manual tasks are cancelled before the final summary. Create a new runtime for later
 progress output.
 
+Abort signals still cancel their tasks safely while close waits for scoped callbacks, including
+manual root and child tasks. This internal cancellation does not permit new caller mutations.
+
 ## Logs
 
 ```ts
