@@ -210,7 +210,7 @@ export function wrapToColumns(
         continue;
       }
 
-      const width =
+      let width =
         cluster === "\t"
           ? tabWidthAtColumn(used, tabSize)
           : clusterWidth(cluster, options.ambiguousWidth ?? 1);
@@ -218,6 +218,22 @@ export function wrapToColumns(
         lines.push(current);
         current = "";
         used = 0;
+        if (cluster === "\t") width = tabWidthAtColumn(used, tabSize);
+      }
+      if (cluster === "\t" && width > columns) {
+        const spaces = " ".repeat(width);
+        const chunkWidth = Math.max(1, Math.floor(columns));
+        for (let offset = 0; offset < spaces.length; offset += chunkWidth) {
+          const part = spaces.slice(offset, offset + chunkWidth);
+          current += part;
+          used += part.length;
+          if (offset + chunkWidth < spaces.length) {
+            lines.push(current);
+            current = "";
+            used = 0;
+          }
+        }
+        continue;
       }
       current += cluster === "\t" ? " ".repeat(width) : cluster;
       used += width;

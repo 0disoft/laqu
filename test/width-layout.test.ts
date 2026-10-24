@@ -188,3 +188,36 @@ test("wrap respects column width without relying on terminal autowrap", () => {
   deepStrictEqual(wrapToColumns("abcd한글", 4), ["abcd", "한글"]);
   deepStrictEqual(wrapToColumns("abc\tz", 8, { tabSize: 8 }), ["abc     ", "z"]);
 });
+
+test("a wrapped tab restarts its stop and splits spaces within the line budget", () => {
+  deepStrictEqual(wrapToColumns("a\t", 2, { tabSize: 8 }), ["a", "  ", "  ", "  ", "  "]);
+  deepStrictEqual(wrapToColumns("a\t", 3, { tabSize: 8 }), ["a", "   ", "   ", "  "]);
+  deepStrictEqual(wrapToColumns("ab\tZ", 2, { tabSize: 8 }), ["ab", "  ", "  ", "  ", "  ", "Z"]);
+});
+
+test("tab wrapping preserves complete expansions at boundaries and across consecutive tabs", () => {
+  for (const columns of [1, 2, 3, 4, 8]) {
+    const lines = wrapToColumns("\t\t", columns, { tabSize: 8 });
+    strictEqual(
+      lines.every((line) => displayWidth(line) <= columns),
+      true,
+    );
+    strictEqual(lines.join(""), " ".repeat(16));
+  }
+  deepStrictEqual(wrapToColumns("a\tb", 8, { tabSize: 8 }), ["a       ", "b"]);
+});
+
+test("wrapped tabs preserve ANSI, wide graphemes and explicit newlines", () => {
+  const styled = wrapToColumns("\u001b[31ma\tZ\u001b[0m", 2, { tabSize: 8 });
+  deepStrictEqual(styled, ["\u001b[31ma", "  ", "  ", "  ", "  ", "Z\u001b[0m"]);
+  for (const input of ["한\t글", "👩‍💻\tZ", "\t\n", "a\n\tb"]) {
+    const lines = wrapToColumns(input, 3, { tabSize: 8 });
+    strictEqual(
+      lines.every((line) => displayWidth(line) <= 3),
+      true,
+      JSON.stringify(lines),
+    );
+    strictEqual(lines.join("").replaceAll(" ", ""), input.replaceAll(/[\t\n]/gu, ""));
+  }
+  deepStrictEqual(wrapToColumns("\t\n", 2, { tabSize: 8 }), ["  ", "  ", "  ", "  ", ""]);
+});

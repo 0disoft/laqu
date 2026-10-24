@@ -7,6 +7,8 @@ Notable user-facing changes to `@0disoft/laqu` are recorded here. The project fo
 
 ### Fixed
 
+- Recalculated tab stops after wrapping and split oversized tab expansions across bounded lines,
+  preserving ANSI sequences, wide graphemes, consecutive tabs, and explicit newlines.
 - Kept standalone indeterminate symbols consistent between compact and ledger layouts without
   replacing mixed child aggregates with a leaf-task symbol.
 - Prioritized failed live tasks and preserved full failure diagnostics in scrollback once per

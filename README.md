@@ -376,6 +376,10 @@ wrapToColumns("abcd한글", 4);
 
 ANSI/control sequences are tokenized as zero-width. Text is segmented by grapheme; static East Asian Width ranges handle wide/fullwidth and ambiguous characters, while Node's Unicode properties distinguish marks, default emoji presentation, VS15/VS16, keycaps, flags, and ZWJ clusters. Ambiguous width defaults to one column unless overridden.
 
+`wrapToColumns()` recalculates a tab's stop from column zero when that tab moves to a new line.
+If the expanded tab is wider than a line, its spaces are split across lines within the column
+budget. ANSI sequences, grapheme boundaries, and explicit newlines remain intact.
+
 ## Child Process Output
 
 Do not mix child process output with live rendering through `stdio: "inherit"`. Pipe child output through the parent process and write it with `runtime.log()`, close the runtime before handing the terminal directly to the child process, or run progress output in plain/log mode.
