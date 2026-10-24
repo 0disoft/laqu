@@ -273,6 +273,10 @@ unsupported backpressure contract, or buffer overflow becomes a sticky `LaquOutp
 by `flush()` and `close()`; output is never reported as successfully flushed after such a failure.
 Live rendering keeps only the latest screen frame while preserving queued scrollback.
 
+Consumed plain and JSON frames are released immediately. Empty queue slots are periodically
+compacted even if continuous backpressure keeps the queue from becoming empty, so already-written
+frames do not accumulate across a long-running command.
+
 For Node.js `Writable` status streams, `flush()` and `close()` also wait for completion of the writes
 submitted by laqu. A write that does not complete within the output timeout reports
 `LAQU_OUTPUT_WRITE_TIMEOUT`. If that write or best-effort cursor cleanup fails after close, its

@@ -57,7 +57,7 @@ export class OutputCoordinator {
   #jsonArrayStarted = false;
   #jsonArrayNeedsComma = false;
   #liveLayoutInvalidated = false;
-  readonly #pendingFrames: Frame[] = [];
+  readonly #pendingFrames: (Frame | undefined)[] = [];
   #pendingHead = 0;
   #pendingLiveFrame: PendingLiveFrame | undefined;
   #pendingLiveFrameCount = 0;
@@ -265,10 +265,18 @@ export class OutputCoordinator {
   #dequeuePending(): Frame | undefined {
     const frame = this.#pendingFrames[this.#pendingHead];
     if (frame !== undefined) {
+      this.#pendingFrames[this.#pendingHead] = undefined;
       this.#pendingHead += 1;
       this.#pendingCount -= 1;
       if (this.#pendingHead === this.#pendingFrames.length) {
         this.#pendingFrames.length = 0;
+        this.#pendingHead = 0;
+      } else if (
+        this.#pendingHead >= 1_024 &&
+        this.#pendingHead * 2 >= this.#pendingFrames.length
+      ) {
+        // Bound empty slots even when steady backpressure keeps the queue nonempty.
+        this.#pendingFrames.splice(0, this.#pendingHead);
         this.#pendingHead = 0;
       }
       return frame;

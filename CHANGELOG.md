@@ -7,6 +7,8 @@ Notable user-facing changes to `@0disoft/laqu` are recorded here. The project fo
 
 ### Fixed
 
+- Released consumed plain and JSON frames and compacted empty queue slots during continuous
+  backpressure, preventing processed output from accumulating while the pending queue stays small.
 - Skipped full task-tree snapshots during silent and never-output flushes while preserving
   retention, scoped callback results, and explicit stream error reporting.
 - Removed the eager grapheme array from line wrapping, reducing temporary allocations when live

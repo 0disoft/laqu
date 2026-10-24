@@ -115,6 +115,21 @@ const liveRenderer: Renderer = {
   },
 };
 
+for (const mode of ["plain", "json"]) {
+  test(`continuous ${mode} backpressure releases consumed frames before the queue empties`, () => {
+    const result = spawnSync(
+      process.execPath,
+      ["--expose-gc", resolve("test/fixtures/pending-frame-retention.mjs"), mode],
+      { encoding: "utf8", timeout: 15_000 },
+    );
+    strictEqual(result.status, 0, result.stderr);
+    const report = JSON.parse(result.stdout);
+    strictEqual(report.collectedFrames, 2_048);
+    strictEqual(report.maxPendingFrames, 3);
+    strictEqual(report.writes, 5_003);
+  });
+}
+
 test("backpressure preserves pending plain frames", async () => {
   const stream = new BackpressureStream();
   const coordinator = new OutputCoordinator(stream, renderer, false);
