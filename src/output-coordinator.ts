@@ -56,6 +56,7 @@ export class OutputCoordinator {
   #settleDrain: (() => void) | undefined;
   #jsonArrayStarted = false;
   #jsonArrayNeedsComma = false;
+  #liveLayoutInvalidated = false;
   readonly #pendingFrames: Frame[] = [];
   #pendingHead = 0;
   #pendingLiveFrame: PendingLiveFrame | undefined;
@@ -139,7 +140,7 @@ export class OutputCoordinator {
       physicalRows += Math.max(1, Math.ceil(displayWidth(line) / columns));
     }
     this.lease.renderedLineCount = physicalRows;
-    this.lease.lastLiveLines = [];
+    this.#liveLayoutInvalidated = true;
   }
 
   async flush(): Promise<void> {
@@ -220,6 +221,7 @@ export class OutputCoordinator {
       this.lease.activeBars = 0;
       this.lease.partialLineKnownByUs = false;
       this.lease.lastLiveLines = [];
+      this.#liveLayoutInvalidated = false;
       this.#jsonArrayStarted = false;
       this.#jsonArrayNeedsComma = false;
       this.#clearPending();
@@ -326,7 +328,11 @@ export class OutputCoordinator {
   }
 
   #writeLive(scrollbackLines: readonly string[], lines: readonly string[]): void {
-    if (scrollbackLines.length === 0 && sameLines(lines, this.lease.lastLiveLines)) {
+    if (
+      !this.#liveLayoutInvalidated &&
+      scrollbackLines.length === 0 &&
+      sameLines(lines, this.lease.lastLiveLines)
+    ) {
       return;
     }
     const cursor = this.#hideCursor();
@@ -337,6 +343,7 @@ export class OutputCoordinator {
     this.lease.renderedLineCount = lines.length;
     this.lease.partialLineKnownByUs = lines.length > 0;
     this.lease.lastLiveLines = [...lines];
+    this.#liveLayoutInvalidated = false;
     this.#writeRaw(chunk);
   }
 

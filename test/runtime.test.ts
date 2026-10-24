@@ -860,6 +860,36 @@ test("live runtime redraws on resize and removes its listener on close", async (
   strictEqual(stderr.listenerCount("resize"), 0);
 });
 
+test("live runtime erases its old rows after consecutive resizes during backpressure", async () => {
+  const stderr = new DeferredDrainStream();
+  stderr.isTTY = true;
+  stderr.failNext = false;
+  const runtime = createLaqu({ stderr, env: {}, theme: { useColor: false } });
+  try {
+    runtime.createTask("first");
+    runtime.createTask("second");
+    await runtime.flush();
+
+    stderr.failNext = true;
+    runtime.log("holding");
+    stderr.columns = 10;
+    stderr.emit("resize");
+    stderr.columns = 8;
+    stderr.emit("resize");
+    const beforeRedraw = stderr.chunks.length;
+    stderr.emit("drain");
+    await runtime.flush();
+
+    const redraw = stderr.chunks.slice(beforeRedraw).join("");
+    strictEqual(countOccurrences(redraw, "\u001b[2K"), 2);
+    strictEqual(countOccurrences(redraw, "\u001b[1A"), 1);
+  } finally {
+    stderr.emit("drain");
+    await runtime.close();
+  }
+  strictEqual(stderr.listenerCount("resize"), 0);
+});
+
 test("process lifecycle handlers are opt-in and disposed on close", async () => {
   const before = processLifecycleListenerCounts();
   const defaultRuntime = createLaqu({

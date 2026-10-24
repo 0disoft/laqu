@@ -92,6 +92,61 @@ test("resize invalidation erases every reflowed physical row", async () => {
   strictEqual(redraw.split("\u001b[1A").length - 1, 2);
 });
 
+for (const widths of [
+  [4, 8],
+  [8, 4],
+]) {
+  test(`consecutive resizes preserve the live region until redraw (${widths.join(" to ")})`, async () => {
+    const stream = new FakeStream();
+    let lines: readonly string[] = ["1234567890"];
+    const coordinator = new OutputCoordinator(
+      stream,
+      {
+        render: () => ({ kind: "live", scrollbackLines: [], lines }),
+      },
+      true,
+    );
+    try {
+      coordinator.render(snapshot(1));
+      const beforeResize = stream.chunks.length;
+      for (const width of widths) coordinator.invalidateLiveLayout(width);
+      lines = ["next"];
+      coordinator.render(snapshot(2));
+
+      const redraw = stream.chunks.slice(beforeResize).join("");
+      const expectedRows = Math.ceil(10 / (widths.at(-1) ?? 1));
+      strictEqual(redraw.split("\u001b[2K").length - 1, expectedRows);
+      strictEqual(redraw.split("\u001b[1A").length - 1, expectedRows - 1);
+    } finally {
+      await coordinator.close();
+    }
+  });
+}
+
+test("resize redraws unchanged text once before resuming identical-frame suppression", async () => {
+  const stream = new FakeStream();
+  const coordinator = new OutputCoordinator(
+    stream,
+    {
+      render: () => ({ kind: "live", scrollbackLines: [], lines: ["same"] }),
+    },
+    true,
+  );
+  try {
+    coordinator.render(snapshot(1));
+    coordinator.invalidateLiveLayout(20);
+    coordinator.invalidateLiveLayout(40);
+    const beforeResize = stream.chunks.length;
+    coordinator.render(snapshot(2));
+    strictEqual(stream.chunks.length, beforeResize + 1);
+    ok(stream.chunks.at(-1)?.includes("\u001b[2K"));
+    coordinator.render(snapshot(3));
+    strictEqual(stream.chunks.length, beforeResize + 1);
+  } finally {
+    await coordinator.close();
+  }
+});
+
 function snapshot(createdAt: number): RuntimeSnapshot {
   return {
     tasks: [],
