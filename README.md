@@ -31,7 +31,8 @@ running tasks, `○` for pending tasks, and `█` / `░` for progress; theme ov
 The summary uses actual task states, including completed tasks removed by retention. A caller message
 such as `waiting` does not change a running task's lifecycle state.
 
-The live header displays the installed package version, for example `laqu 2.0.0`.
+The live header displays the package version, for example `laqu 2.0.0`. Builds embed the version from
+`package.json`, so bundled CLIs do not need Laqu's package files at runtime to display it.
 Interactive human output on the default stderr checks npm's public registry for a newer stable
 version in the background. A successful check is cached for 24 hours in the user's cache directory
 (`%LOCALAPPDATA%/laqu` on Windows, `$XDG_CACHE_HOME/laqu` or `~/.cache/laqu` elsewhere).

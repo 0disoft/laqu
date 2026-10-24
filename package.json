@@ -55,7 +55,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "bun run clean && tsc -p tsconfig.build.json",
+    "build": "bun run clean && node tools/generate-package-info.mjs && tsc -p tsconfig.build.json",
     "bench:quick": "bun run build && node --expose-gc benchmarks/quick.mjs",
     "check": "bun run typecheck && bun run lint && bun run format:check && bun run test && bun run build",
     "clean": "node -e \"const fs = require('node:fs'); for (const p of ['dist', 'dist-test', 'coverage']) fs.rmSync(p, { recursive: true, force: true });\"",
@@ -68,8 +68,8 @@
     "lint": "oxlint src test",
     "test": "bun run build:test && node --test \"dist-test/test/**/*.test.js\"",
     "pack:check": "bun run build && node test/fixtures/package-consumer.mjs",
-    "build:test": "tsc -p tsconfig.test.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "build:test": "node tools/generate-package-info.mjs && tsc -p tsconfig.test.json",
+    "typecheck": "node tools/generate-package-info.mjs && tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
     "@types/node": "22.x",

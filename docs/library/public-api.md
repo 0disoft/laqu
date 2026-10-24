@@ -31,7 +31,8 @@ TTY output checks automatically outside CI; custom streams require `true`. `fals
 Plain, machine-readable, silent, CI, dumb-terminal, and non-TTY output never check. Notices share
 the live output coordinator; requests time out after 1.5 seconds, cache successes for 24 hours, and
 are cancelled when the last subscribed runtime closes. Checks never block flush or close.
-The live ledger header reads its version from the installed package metadata.
+The live ledger header uses the version embedded from package metadata during the build.
+Runtime imports do not resolve Laqu's own package or read its package.json, including in bundled CLIs.
 
 ## Compatibility Contract
 
