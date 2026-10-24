@@ -1,7 +1,7 @@
 import { logEvent, summaryEvent, taskEvent, type LaquEvent } from "./events.js";
 import { renderSegments, text, type CompiledTheme } from "./theme.js";
 import type { OutputFormat, ProgressPolicy, StreamCapability } from "./types.js";
-import { sanitizeText, truncateToColumns } from "./width.js";
+import { displayWidth, sanitizeText, truncateToColumns } from "./width.js";
 import type { LogRecord, RuntimeSnapshot, TaskSnapshot, TaskStatus } from "./task-store.js";
 
 export type Frame =
@@ -217,14 +217,161 @@ function rowsForSnapshot(
 ): string[] {
   const rows = flattenTasks(snapshot.tasks);
   const prioritized = prioritizeActiveTasks(rows);
-  const taskBudget = rows.length > maxRows && maxRows > 1 ? maxRows - 1 : maxRows;
+  if (rows.length === 0) {
+    return [];
+  }
+  // Only spend rows on decoration when at least two task/overflow rows remain.
+  const ledger = columns >= 64;
+  const decorated = ledger && maxRows >= 7;
+  const available = decorated ? maxRows - 5 : maxRows;
+  const taskBudget = rows.length > available && available > 1 ? available - 1 : available;
   const visible = prioritized.slice(0, taskBudget);
-  const output = visible.map((task) => renderTaskRow(task, theme, columns));
+  const layout = ledger ? ledgerLayout(visible, columns) : undefined;
+  const output = visible.map((task) =>
+    layout === undefined
+      ? renderTaskRow(task, theme, columns)
+      : renderLedgerRow(task, theme, layout),
+  );
   const hidden = rows.length - visible.length;
-  if (hidden > 0 && output.length < maxRows) {
+  if (hidden > 0 && output.length < available) {
     output.push(truncateToColumns(`${hidden} more tasks...`, columns, theme.tokens));
   }
+  if (decorated && layout !== undefined) {
+    const rule = theme.format(text("─".repeat(columns), "muted"));
+    output.unshift(
+      `${theme.format(text("laqu", "accent"))}  ${theme.format(text("─".repeat(columns - 6), "muted"))}`,
+      theme.format(
+        text(ledgerCells(["TASK", "PROGRESS", "COUNT", "%", "STATE"], layout, theme), "muted"),
+      ),
+      rule,
+    );
+    output.push(
+      rule,
+      truncateToColumns(ledgerSummary(snapshot, rows, theme), columns, theme.tokens),
+    );
+  }
   return output;
+}
+
+type LedgerLayout = readonly [number, number, number, number, number];
+
+function ledgerLayout(tasks: readonly TaskSnapshot[], columns: number): LedgerLayout {
+  const title = Math.max(14, Math.min(32, Math.floor(columns * 0.28)));
+  const count = tasks.reduce(
+    (width, task) => Math.max(width, Math.min(12, displayWidth(ledgerCount(task)))),
+    5,
+  );
+  // Five cells, separated by two spaces each; keep the bar at exactly 20 cells.
+  const countWidth = Math.min(count, columns - title - 22 - 5 - 8 - 8);
+  return [title, 22, countWidth, 5, columns - title - 22 - countWidth - 5 - 8];
+}
+
+function ledgerCell(value: string, width: number, theme: CompiledTheme, right = false): string {
+  const clipped = truncateToColumns(value, width, theme.tokens);
+  const padding = " ".repeat(Math.max(0, width - displayWidth(clipped)));
+  return right ? `${padding}${clipped}` : `${clipped}${padding}`;
+}
+
+function ledgerCells(
+  values: readonly string[],
+  layout: LedgerLayout,
+  theme: CompiledTheme,
+): string {
+  return values
+    .map((value, index) => ledgerCell(value, layout[index] ?? 0, theme, index === 2 || index === 3))
+    .join("  ");
+}
+
+function renderLedgerRow(task: TaskSnapshot, theme: CompiledTheme, layout: LedgerLayout): string {
+  const [bar, count, percent] = ledgerProgress(task, theme);
+  const title = renderSegments(theme, [
+    text(theme.tokens.indent.repeat(Math.min(task.depth, layout[0]))),
+    text(statusSymbol(task, theme), statusStyle(task.status)),
+    text(theme.tokens.gap),
+    text(
+      sanitizeText(task.title),
+      task.status === "running" ? undefined : statusStyle(task.status),
+    ),
+  ]);
+  const state =
+    task.message === undefined
+      ? task.status === "pending"
+        ? "waiting"
+        : task.status
+      : sanitizeText(task.message);
+  const detail = task.detail === undefined ? "" : `${theme.tokens.gap}${sanitizeText(task.detail)}`;
+  const cells = [title, bar, count, percent, `${state}${detail}`];
+  return cells
+    .map((value, index) => {
+      if (index === 0 || index === 1) {
+        return ledgerCell(value, layout[index], theme);
+      }
+      const style = statusStyle(task.status);
+      return theme.format(
+        text(ledgerCell(value, layout[index] ?? 0, theme, index === 2 || index === 3), style),
+      );
+    })
+    .join("  ");
+}
+
+function ledgerCount(task: TaskSnapshot): string {
+  return !task.aggregateFromChildren
+    ? task.progress.kind === "determinate"
+      ? `${task.progress.current}/${task.progress.total}`
+      : task.progress.kind === "counter"
+        ? String(task.progress.current)
+        : ""
+    : "";
+}
+
+function ledgerProgress(
+  task: TaskSnapshot,
+  theme: CompiledTheme,
+): readonly [string, string, string] {
+  const count = ledgerCount(task);
+  if (task.aggregate.kind === "ratio") {
+    const complete = Math.max(0, Math.min(20, Math.round(task.aggregate.ratio * 20)));
+    const bar = `[${theme.format(text(progressCells(theme.tokens.progressComplete, complete), statusStyle(task.status)))}${theme.format(text(progressCells(theme.tokens.progressIncomplete, 20 - complete), "muted"))}]`;
+    return [
+      bar,
+      count,
+      `${Math.round(task.aggregate.ratio * 100)}${task.aggregate.overrun ? "+" : ""}%`,
+    ];
+  }
+  const bar =
+    task.aggregate.kind === "mixed"
+      ? "mixed"
+      : task.progress.kind === "indeterminate"
+        ? theme.tokens.progressIndeterminate
+        : "";
+  return [theme.format(text(bar, "muted")), count, ""];
+}
+
+function progressCells(token: string, width: number): string {
+  const glyph = truncateToColumns(token, width);
+  const glyphWidth = displayWidth(glyph);
+  const repeated = glyphWidth === 0 ? "" : glyph.repeat(Math.floor(width / glyphWidth));
+  return `${repeated}${" ".repeat(width - displayWidth(repeated))}`;
+}
+
+function ledgerSummary(
+  snapshot: RuntimeSnapshot,
+  rows: readonly TaskSnapshot[],
+  theme: CompiledTheme,
+): string {
+  const waiting = rows.filter((task) => task.status === "pending").length;
+  const counts = [
+    [snapshot.summary.running, "running", "accent"],
+    [waiting, "waiting", "muted"],
+    [snapshot.summary.succeeded, "succeeded", "success"],
+    [snapshot.summary.failed, "failed", "error"],
+    [snapshot.summary.cancelled, "cancelled", "warning"],
+    [snapshot.summary.skipped, "skipped", "warning"],
+  ] as const;
+  return counts
+    .filter(([count]) => count > 0)
+    .map(([count, label, style]) => theme.format(text(`${count} ${label}`, style)))
+    .join(" · ");
 }
 
 function prioritizeActiveTasks(tasks: readonly TaskSnapshot[]): TaskSnapshot[] {

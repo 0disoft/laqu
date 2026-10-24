@@ -20,15 +20,14 @@ const publish = progress.createTask("publish preview", { total: 100, message: "w
 for (let value = 0; value <= 100; value += 2) {
   install.setCompleted(value);
   install.setMessage(value < 100 ? "downloading" : "ready");
-  install.setDetail(`${value}/100`);
 
   if (value >= 24) {
-    build.setCompleted(Math.min(100, (value - 24) * 1.35));
+    build.setCompleted(Math.min(100, Math.round((value - 24) * 1.35)));
     build.setMessage(value < 92 ? "bundling" : "ready");
   }
 
   if (value >= 56) {
-    publish.setCompleted(Math.min(100, (value - 56) * 2.3));
+    publish.setCompleted(Math.min(100, Math.round((value - 56) * 2.3)));
     publish.setMessage(value < 100 ? "uploading" : "ready");
   }
 

@@ -881,8 +881,10 @@ test("live runtime erases its old rows after consecutive resizes during backpres
     await runtime.flush();
 
     const redraw = stderr.chunks.slice(beforeRedraw).join("");
-    strictEqual(countOccurrences(redraw, "\u001b[2K"), 2);
-    strictEqual(countOccurrences(redraw, "\u001b[1A"), 1);
+    // At eight columns, six 80-cell ledger lines reflow to 60 rows;
+    // the nine-cell summary reflows to two more rows.
+    strictEqual(countOccurrences(redraw, "\u001b[2K"), 62);
+    strictEqual(countOccurrences(redraw, "\u001b[1A"), 61);
   } finally {
     stderr.emit("drain");
     await runtime.close();

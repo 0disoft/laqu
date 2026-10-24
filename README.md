@@ -13,10 +13,23 @@ versioned JSON/NDJSON events use the same task model when a terminal UI is not a
 ![Laqu rendering concurrent CLI tasks while stdout stays available for JSON](media/terminal-preview.svg)
 
 ```text
-› install packages  [███████████████░░░░░] 76%  downloading  76/100
-› build artifacts   [██████████░░░░░░░░░░] 49%  bundling
-· publish preview   [░░░░░░░░░░░░░░░░░░░░] 0%  waiting
+laqu  ──────────────────────────────────────────────────────────────────────────
+TASK                    PROGRESS                 COUNT      %  STATE
+────────────────────────────────────────────────────────────────────────────────
+› install packages      [███████████████░░░░░]  76/100    76%  downloading
+› build artifacts       [██████████░░░░░░░░░░]  49/100    49%  bundling
+› publish preview       [░░░░░░░░░░░░░░░░░░░░]   0/100     0%  waiting
+────────────────────────────────────────────────────────────────────────────────
+3 running
 ```
+
+Live terminals use shared task, progress, count, percentage, and state columns with 20-cell bars.
+At fewer than 64 columns, tasks return to compact rows. Headers, dividers, and the lifecycle summary
+appear when at least seven rows are available; smaller row budgets keep task rows and the hidden-task
+count. Long fields are clipped by terminal cell width, including CJK and emoji. Defaults use `›` for
+running tasks, `○` for pending tasks, and `█` / `░` for progress; theme overrides still apply.
+The summary uses actual task states, including completed tasks removed by retention. A caller message
+such as `waiting` does not change a running task's lifecycle state.
 
 stdout remains available for the result:
 

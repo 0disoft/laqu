@@ -1,39 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="420" viewBox="0 0 960 420" role="img" aria-labelledby="title description">
-  <title id="title">Laqu terminal progress preview</title>
-  <desc id="description">Three concurrent CLI tasks render progress on stderr while a JSON result remains clean on stdout.</desc>
-  <rect width="960" height="420" rx="20" fill="#0b1020"/>
-  <rect x="1" y="1" width="958" height="418" rx="19" fill="none" stroke="#26324a" stroke-width="2"/>
-  <circle cx="38" cy="35" r="7" fill="#ff6b6b"/>
-  <circle cx="62" cy="35" r="7" fill="#ffd166"/>
-  <circle cx="86" cy="35" r="7" fill="#4ade80"/>
-  <text x="480" y="41" fill="#8b9bb4" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="15" text-anchor="middle">release · laqu</text>
-  <line x1="0" y1="64" x2="960" y2="64" stroke="#26324a"/>
-
-  <g font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="21">
-    <text x="36" y="112" fill="#7dd3fc">›</text>
-    <text x="70" y="112" fill="#e5edf8">install packages</text>
-    <text x="292" y="112" fill="#4ade80">[███████████████</text>
-    <text x="508" y="112" fill="#35425a">░░░░░]</text>
-    <text x="608" y="112" fill="#e5edf8">76%</text>
-    <text x="676" y="112" fill="#8b9bb4">downloading · 76/100</text>
-
-    <text x="36" y="158" fill="#7dd3fc">›</text>
-    <text x="70" y="158" fill="#e5edf8">build artifacts</text>
-    <text x="292" y="158" fill="#4ade80">[██████████</text>
-    <text x="450" y="158" fill="#35425a">░░░░░░░░░░]</text>
-    <text x="608" y="158" fill="#e5edf8">49%</text>
-    <text x="676" y="158" fill="#8b9bb4">bundling</text>
-
-    <text x="36" y="204" fill="#64748b">·</text>
-    <text x="70" y="204" fill="#e5edf8">publish preview</text>
-    <text x="292" y="204" fill="#35425a">[░░░░░░░░░░░░░░░░░░░░]</text>
-    <text x="608" y="204" fill="#e5edf8">0%</text>
-    <text x="676" y="204" fill="#8b9bb4">waiting</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="400" viewBox="0 0 1200 400" role="img" aria-labelledby="title description">
+  <title id="title">Laqu live column ledger</title>
+  <desc id="description">Actual renderer output at 100 columns: aligned task, progress, count, percentage and state columns, with three running tasks. The caller message waiting does not change task lifecycle counts. Progress stays on stderr and stdout remains available for JSON.</desc>
+  <rect width="1200" height="400" rx="12" fill="#0c1520"/>
+  <g font-family="Consolas, ui-monospace, monospace" font-size="18" xml:space="preserve">
+    <text x="36" y="44" fill="#9bafc5">$ node examples/basic.mjs</text>
+    <text y="100"><tspan x="36 47 58 69" fill="#25dceb">laqu</tspan><tspan x="80 91" fill="#e6edf5">  </tspan><tspan x="102 113 124 135 146 157 168 179 190 201 212 223 234 245 256 267 278 289 300 311 322 333 344 355 366 377 388 399 410 421 432 443 454 465 476 487 498 509 520 531 542 553 564 575 586 597 608 619 630 641 652 663 674 685 696 707 718 729 740 751 762 773 784 795 806 817 828 839 850 861 872 883 894 905 916 927 938 949 960 971 982 993 1004 1015 1026 1037 1048 1059 1070 1081 1092 1103 1114 1125" fill="#71869e">──────────────────────────────────────────────────────────────────────────────────────────────</tspan></text>
+    <text y="130"><tspan x="36 47 58 69 80 91 102 113 124 135 146 157 168 179 190 201 212 223 234 245 256 267 278 289 300 311 322 333 344 355 366 377 388 399 410 421 432 443 454 465 476 487 498 509 520 531 542 553 564 575 586 597 608 619 630 641 652 663 674 685 696 707 718 729 740 751 762 773 784 795 806 817 828 839 850 861 872 883 894 905 916 927 938 949 960 971 982 993 1004 1015 1026 1037 1048 1059 1070 1081 1092 1103 1114 1125" fill="#71869e">TASK                          PROGRESS                 COUNT      %  STATE                          </tspan></text>
+    <text y="160"><tspan x="36 47 58 69 80 91 102 113 124 135 146 157 168 179 190 201 212 223 234 245 256 267 278 289 300 311 322 333 344 355 366 377 388 399 410 421 432 443 454 465 476 487 498 509 520 531 542 553 564 575 586 597 608 619 630 641 652 663 674 685 696 707 718 729 740 751 762 773 784 795 806 817 828 839 850 861 872 883 894 905 916 927 938 949 960 971 982 993 1004 1015 1026 1037 1048 1059 1070 1081 1092 1103 1114 1125" fill="#71869e">────────────────────────────────────────────────────────────────────────────────────────────────────</tspan></text>
+    <text y="190"><tspan x="36" fill="#25dceb">›</tspan><tspan x="47 58 69 80 91 102 113 124 135 146 157 168 179 190 201 212 223 234 245 256 267 278 289 300 311 322 333 344 355 366" fill="#e6edf5"> install packages            [</tspan><tspan x="377 388 399 410 421 432 443 454 465 476 487 498 509 520 531" fill="#25dceb">███████████████</tspan><tspan x="542 553 564 575 586" fill="#71869e">░░░░░</tspan><tspan x="597 608 619" fill="#e6edf5">]  </tspan><tspan x="630 641 652 663 674 685" fill="#25dceb">76/100</tspan><tspan x="696 707" fill="#e6edf5">  </tspan><tspan x="718 729 740 751 762" fill="#25dceb">  76%</tspan><tspan x="773 784" fill="#e6edf5">  </tspan><tspan x="795 806 817 828 839 850 861 872 883 894 905 916 927 938 949 960 971 982 993 1004 1015 1026 1037 1048 1059 1070 1081 1092 1103 1114 1125" fill="#25dceb">downloading                    </tspan></text>
+    <text y="220"><tspan x="36" fill="#25dceb">›</tspan><tspan x="47 58 69 80 91 102 113 124 135 146 157 168 179 190 201 212 223 234 245 256 267 278 289 300 311 322 333 344 355 366" fill="#e6edf5"> build artifacts             [</tspan><tspan x="377 388 399 410 421 432 443 454 465 476" fill="#25dceb">██████████</tspan><tspan x="487 498 509 520 531 542 553 564 575 586" fill="#71869e">░░░░░░░░░░</tspan><tspan x="597 608 619" fill="#e6edf5">]  </tspan><tspan x="630 641 652 663 674 685" fill="#25dceb">49/100</tspan><tspan x="696 707" fill="#e6edf5">  </tspan><tspan x="718 729 740 751 762" fill="#25dceb">  49%</tspan><tspan x="773 784" fill="#e6edf5">  </tspan><tspan x="795 806 817 828 839 850 861 872 883 894 905 916 927 938 949 960 971 982 993 1004 1015 1026 1037 1048 1059 1070 1081 1092 1103 1114 1125" fill="#25dceb">bundling                       </tspan></text>
+    <text y="250"><tspan x="36" fill="#25dceb">›</tspan><tspan x="47 58 69 80 91 102 113 124 135 146 157 168 179 190 201 212 223 234 245 256 267 278 289 300 311 322 333 344 355 366" fill="#e6edf5"> publish preview             [</tspan><tspan x="377 388 399 410 421 432 443 454 465 476 487 498 509 520 531 542 553 564 575 586" fill="#71869e">░░░░░░░░░░░░░░░░░░░░</tspan><tspan x="597 608 619" fill="#e6edf5">]  </tspan><tspan x="630 641 652 663 674 685" fill="#25dceb"> 0/100</tspan><tspan x="696 707" fill="#e6edf5">  </tspan><tspan x="718 729 740 751 762" fill="#25dceb">   0%</tspan><tspan x="773 784" fill="#e6edf5">  </tspan><tspan x="795 806 817 828 839 850 861 872 883 894 905 916 927 938 949 960 971 982 993 1004 1015 1026 1037 1048 1059 1070 1081 1092 1103 1114 1125" fill="#25dceb">waiting                        </tspan></text>
+    <text y="280"><tspan x="36 47 58 69 80 91 102 113 124 135 146 157 168 179 190 201 212 223 234 245 256 267 278 289 300 311 322 333 344 355 366 377 388 399 410 421 432 443 454 465 476 487 498 509 520 531 542 553 564 575 586 597 608 619 630 641 652 663 674 685 696 707 718 729 740 751 762 773 784 795 806 817 828 839 850 861 872 883 894 905 916 927 938 949 960 971 982 993 1004 1015 1026 1037 1048 1059 1070 1081 1092 1103 1114 1125" fill="#71869e">────────────────────────────────────────────────────────────────────────────────────────────────────</tspan></text>
+    <text y="310"><tspan x="36 47 58 69 80 91 102 113 124" fill="#25dceb">3 running</tspan></text>
+    <text x="36" y="370" fill="#9bafc5">stdout  {"artifact":"dist/laqu.js","status":"ready"}</text>
   </g>
-
-  <line x1="36" y1="242" x2="924" y2="242" stroke="#26324a"/>
-  <text x="36" y="280" fill="#8b9bb4" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="16">stderr · live progress</text>
-  <text x="36" y="325" fill="#8b9bb4" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="16">stdout · caller-owned result</text>
-  <rect x="36" y="344" width="888" height="48" rx="8" fill="#111a2d" stroke="#26324a"/>
-  <text x="56" y="375" fill="#f8fafc" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="18">{"artifact":"dist/laqu.js","status":"ready"}</text>
 </svg>
