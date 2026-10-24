@@ -166,6 +166,24 @@ test("truncate expands tabs from the current column", () => {
   strictEqual(displayWidth(truncated), 9);
 });
 
+for (const { name, input, columns, expected } of [
+  { name: "ASCII", input: "x".repeat(100_000), columns: 80, expected: `${"x".repeat(79)}…` },
+  { name: "ZWJ emoji", input: "👩‍💻".repeat(10_000), columns: 5, expected: "👩‍💻👩‍💻…" },
+  {
+    name: "styled combining marks",
+    input: `\u001b[31m${"e\u0301".repeat(10_000)}\u001b[0m`,
+    columns: 4,
+    expected: "\u001b[31me\u0301e\u0301e\u0301…\u001b[0m",
+  },
+  { name: "tabs", input: `abc\t${"x".repeat(100_000)}`, columns: 10, expected: "abc     x…" },
+]) {
+  test(`long ${name} truncation preserves the visible prefix and column budget`, () => {
+    const truncated = truncateToColumns(input, columns, { overflowMarker: "…" });
+    strictEqual(truncated, expected);
+    strictEqual(displayWidth(truncated), columns);
+  });
+}
+
 test("wrap respects column width without relying on terminal autowrap", () => {
   deepStrictEqual(wrapToColumns("abcd한글", 4), ["abcd", "한글"]);
   deepStrictEqual(wrapToColumns("abc\tz", 8, { tabSize: 8 }), ["abc     ", "z"]);

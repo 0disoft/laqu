@@ -109,18 +109,24 @@ export function graphemes(input: string): string[] {
 }
 
 export function displayWidth(input: string, options: WidthOptions = {}): number {
+  return measureWidth(input, options, Number.POSITIVE_INFINITY);
+}
+
+function measureWidth(input: string, options: WidthOptions, limit: number): number {
   let width = 0;
   const tabSize = normalizedTabSize(options.tabSize);
   for (const token of tokenizeAnsi(input)) {
     if (token.kind === "ansi") {
       continue;
     }
-    for (const cluster of graphemes(token.value)) {
-      if (cluster === "\t") {
-        width += tabWidthAtColumn(width, tabSize);
-        continue;
+    for (const { segment: cluster } of segmenter.segment(token.value)) {
+      width +=
+        cluster === "\t"
+          ? tabWidthAtColumn(width, tabSize)
+          : clusterWidth(cluster, options.ambiguousWidth ?? 1);
+      if (width > limit) {
+        return width;
       }
-      width += clusterWidth(cluster, options.ambiguousWidth ?? 1);
     }
   }
   return width;
@@ -136,7 +142,7 @@ export function truncateToColumns(
   }
 
   const requestedMarker =
-    displayWidth(input, options) > columns ? (options.overflowMarker ?? "") : "";
+    measureWidth(input, options, columns) > columns ? (options.overflowMarker ?? "") : "";
   const marker =
     displayWidth(requestedMarker, options) > columns
       ? truncateToColumns(requestedMarker, columns, { ...options, overflowMarker: "" })
@@ -154,7 +160,7 @@ export function truncateToColumns(
       continue;
     }
 
-    for (const cluster of graphemes(token.value)) {
+    for (const { segment: cluster } of segmenter.segment(token.value)) {
       const width =
         cluster === "\t"
           ? tabWidthAtColumn(used, tabSize)
