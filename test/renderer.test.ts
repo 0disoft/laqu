@@ -311,6 +311,28 @@ test("live ledger preserves counter, aggregate, mixed and indeterminate semantic
   strictEqual(lines[3]?.includes("~"), true);
 });
 
+test("real indeterminate tasks keep their symbol across widths while parents remain mixed", () => {
+  const store = new TaskStore();
+  const own = store.createTask("standalone");
+  store.update(own, { progress: { kind: "indeterminate" } });
+  const parent = store.createTask("parent");
+  store.update(parent, { progress: { kind: "indeterminate" } });
+  store.createTask("unknown child", {}, parent);
+  const state = store.snapshot();
+  for (const columns of [60, 100]) {
+    for (const symbol of ["~", "busy"]) {
+      const custom = compileTheme({ useColor: false, progressIndeterminate: symbol });
+      const frame = new AnsiLiveRenderer(custom, columns, 12).render(state);
+      if (frame.kind !== "live") throw new Error("expected live frame");
+      const ownRow = frame.lines.find((line) => line.includes("standalone")) ?? "";
+      const parentRow = frame.lines.find((line) => line.includes("parent")) ?? "";
+      strictEqual(ownRow.includes(symbol), true, `${columns} columns: ${ownRow}`);
+      strictEqual(ownRow.includes("mixed"), false);
+      strictEqual(parentRow.includes("mixed"), true);
+    }
+  }
+});
+
 test("live ledger sanitizes fields and resets colors before column padding", () => {
   const renderer = new AnsiLiveRenderer(compileTheme(), 100, 8);
   const frame = renderer.render(

@@ -7,6 +7,8 @@ Notable user-facing changes to `@0disoft/laqu` are recorded here. The project fo
 
 ### Fixed
 
+- Kept standalone indeterminate symbols consistent between compact and ledger layouts without
+  replacing mixed child aggregates with a leaf-task symbol.
 - Prioritized failed live tasks and preserved full failure diagnostics in scrollback once per
   changed cause, even when the live row budget or terminal-task retention hides their rows.
 - Preserved successful scoped callback results when automatic output flushing or deferred close

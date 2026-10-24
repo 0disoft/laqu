@@ -35,6 +35,8 @@ Failed tasks take priority over active and successful tasks when rows are limite
 records each failure's full title, message, and detail in scrollback, wrapped to terminal width.
 Unchanged failure diagnostics are emitted once; a changed cause produces a new diagnostic, and
 later screen redraws or task retention do not erase already-written scrollback.
+Standalone indeterminate tasks use the theme's indeterminate symbol at every terminal width;
+`mixed` describes an aggregate containing children with unknown progress.
 
 The live header displays the package version, for example `laqu 2.0.0`. Builds embed the version from
 `package.json`, so bundled CLIs do not need Laqu's package files at runtime to display it.

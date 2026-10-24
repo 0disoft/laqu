@@ -357,10 +357,10 @@ function ledgerProgress(
     ];
   }
   const bar =
-    task.aggregate.kind === "mixed"
-      ? "mixed"
-      : task.progress.kind === "indeterminate"
-        ? theme.tokens.progressIndeterminate
+    !task.aggregateFromChildren && task.progress.kind === "indeterminate"
+      ? theme.tokens.progressIndeterminate
+      : task.aggregate.kind === "mixed"
+        ? "mixed"
         : "";
   return [theme.format(text(bar, "muted")), count, ""];
 }
