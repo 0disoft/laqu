@@ -1,5 +1,7 @@
 import { rejects, strictEqual } from "node:assert";
+import { spawnSync } from "node:child_process";
 import { EventEmitter } from "node:events";
+import { resolve } from "node:path";
 import { Writable } from "node:stream";
 import test from "node:test";
 
@@ -272,6 +274,34 @@ test("Node Writable writes that never complete fail within the output deadline",
   stream.complete();
   strictEqual(stream.listenerCount("error"), 0);
 });
+
+for (const mode of ["late", "late-no-destroy", "caller", "success", "cleanup", "eventless"]) {
+  test(`late Writable completion after close is contained and cleaned up (${mode})`, () => {
+    const result = spawnSync(
+      process.execPath,
+      [resolve("test/fixtures/late-write-error.mjs"), mode],
+      {
+        encoding: "utf8",
+        timeout: 10_000,
+      },
+    );
+    strictEqual(result.status, 0, result.stderr);
+    strictEqual(result.stderr, "");
+    strictEqual(JSON.parse(result.stdout).survived, true);
+  });
+}
+
+for (const mode of ["unrelated", "unrelated-during"]) {
+  test(`late Writable cleanup leaves unrelated caller errors observable (${mode})`, () => {
+    const result = spawnSync(
+      process.execPath,
+      [resolve("test/fixtures/late-write-error.mjs"), mode],
+      { encoding: "utf8", timeout: 10_000 },
+    );
+    strictEqual(result.status, 1);
+    strictEqual(result.stderr.includes("unrelated caller error"), true, result.stderr);
+  });
+}
 
 test("pending output queue fails explicitly at its bound", async () => {
   const stream = new HangingBackpressureStream();

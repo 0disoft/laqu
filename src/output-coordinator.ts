@@ -425,6 +425,9 @@ export class OutputCoordinator {
 
   #settleWrite(pending: PendingWrite, error?: Error | null): void {
     if (pending.settled) {
+      if (error != null && this.lease.closed) {
+        this.#guardLateWriteError(error);
+      }
       return;
     }
     if (error != null) {
@@ -439,6 +442,21 @@ export class OutputCoordinator {
       this.#resolveWrites = undefined;
       this.#writePromise = undefined;
     }
+  }
+
+  #guardLateWriteError(error: Error): void {
+    const target = this.target;
+    if (!(target instanceof Writable) || target.listenerCount("error") > 0) {
+      return;
+    }
+    // A timed-out write can complete after close removed our stream listeners.
+    // Node delivers this callback before its matching error event.
+    const onError = (emitted: Error): void => {
+      if (emitted !== error) throw emitted;
+    };
+    target.once("error", onError);
+    // Also release the guard when a custom Writable suppresses the event.
+    setImmediate(() => target.off("error", onError));
   }
 
   #waitForDrain(): void {
@@ -478,7 +496,13 @@ export class OutputCoordinator {
       return;
     }
     try {
-      this.target.write(chunk);
+      if (this.target instanceof Writable) {
+        this.target.write(chunk, (error) => {
+          if (error != null && this.lease.closed) this.#guardLateWriteError(error);
+        });
+      } else {
+        this.target.write(chunk);
+      }
     } catch {
       // The original output failure remains authoritative.
     }

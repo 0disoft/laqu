@@ -261,7 +261,10 @@ Live rendering keeps only the latest screen frame while preserving queued scroll
 
 For Node.js `Writable` status streams, `flush()` and `close()` also wait for completion of the writes
 submitted by laqu. A write that does not complete within the output timeout reports
-`LAQU_OUTPUT_WRITE_TIMEOUT`. Custom `StreamTarget` implementations without Node's write callback
+`LAQU_OUTPUT_WRITE_TIMEOUT`. If that write or best-effort cursor cleanup fails after close, its
+matching Writable error is handled without replacing the original output failure or leaving a
+persistent error listener. Existing caller error listeners and unrelated errors keep their behavior.
+Custom `StreamTarget` implementations without Node's write callback
 retain the `write()` and `drain` contract; laqu does not close caller-owned streams.
 
 ```ts
