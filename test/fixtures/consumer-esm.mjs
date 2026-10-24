@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import { createLaqu, LaquOutputError } from "@0disoft/laqu";
 import { LAQU_EVENT_SCHEMA_VERSION } from "@0disoft/laqu/events";
@@ -24,6 +25,27 @@ if (displayWidth("한") !== 2) {
 if (compileTheme({ useColor: false }).tokens.successSymbol.length === 0) {
   throw new Error("theme subpath export is not functional");
 }
+
+const liveChunks = [];
+const live = createLaqu({
+  stderr: {
+    isTTY: true,
+    columns: 80,
+    write: (chunk) => {
+      liveChunks.push(chunk);
+      return true;
+    },
+  },
+  env: {},
+  checkForUpdates: false,
+  theme: { useColor: false },
+});
+live.createTask("package version", { ratio: 0.5 });
+await live.close();
+const metadata = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.resolve("@0disoft/laqu")), "utf8"),
+);
+assert.ok(liveChunks.join("").includes(`laqu ${metadata.version}`));
 
 const chunks = [];
 const stderr = {

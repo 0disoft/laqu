@@ -38,6 +38,7 @@ export interface RuntimeOptions {
   readonly retention?: RuntimeRetentionOptions;
   readonly theme?: ThemeInput;
   readonly manageProcessLifecycle?: boolean;
+  readonly checkForUpdates?: boolean;
 }
 
 export interface RuntimeRetentionOptions {

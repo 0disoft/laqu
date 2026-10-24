@@ -13,7 +13,7 @@ versioned JSON/NDJSON events use the same task model when a terminal UI is not a
 ![Laqu rendering concurrent CLI tasks while stdout stays available for JSON](media/terminal-preview.svg)
 
 ```text
-laqu  ──────────────────────────────────────────────────────────────────────────
+laqu 2.0.0  ────────────────────────────────────────────────────────────────────
 TASK                    PROGRESS                 COUNT      %  STATE
 ────────────────────────────────────────────────────────────────────────────────
 › install packages      [███████████████░░░░░]  76/100    76%  downloading
@@ -30,6 +30,24 @@ count. Long fields are clipped by terminal cell width, including CJK and emoji. 
 running tasks, `○` for pending tasks, and `█` / `░` for progress; theme overrides still apply.
 The summary uses actual task states, including completed tasks removed by retention. A caller message
 such as `waiting` does not change a running task's lifecycle state.
+
+The live header displays the installed package version, for example `laqu 2.0.0`.
+Interactive human output on the default stderr checks npm's public registry for a newer stable
+version in the background. A successful check is cached for 24 hours in the user's cache directory
+(`%LOCALAPPDATA%/laqu` on Windows, `$XDG_CACHE_HOME/laqu` or `~/.cache/laqu` elsewhere).
+Checks use a 1.5-second network timeout, accept at most 8 KiB, and never wait during `flush()` or
+`close()`. Offline failures are silent; closing the last subscribed runtime cancels pending work.
+At most one notice is displayed per process, through live scrollback on the status stream:
+
+```text
+Update available: laqu 2.0.0 → 2.1.0. Run npm install @0disoft/laqu@latest
+```
+
+CI, dumb terminals,
+non-TTY streams, plain, JSON/NDJSON, and silent output do not check. Set `checkForUpdates: false`
+to disable checks. Custom status streams default to no checks; `checkForUpdates: true` enables
+them only for a live human TTY outside CI. The request sends the package name and installed
+version, with no task titles, messages, or logs.
 
 stdout remains available for the result:
 

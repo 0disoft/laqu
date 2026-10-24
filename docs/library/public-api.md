@@ -26,6 +26,13 @@ status-output delivery failure from application task failure.
 Task events expose aggregate `progress` and direct `ownProgress`; the latter retains `current` and
 `total` for determinate tasks or `current` for counters.
 
+`RuntimeOptions.checkForUpdates` controls background stable-version notices. Default stderr human
+TTY output checks automatically outside CI; custom streams require `true`. `false` disables checks.
+Plain, machine-readable, silent, CI, dumb-terminal, and non-TTY output never check. Notices share
+the live output coordinator; requests time out after 1.5 seconds, cache successes for 24 hours, and
+are cancelled when the last subscribed runtime closes. Checks never block flush or close.
+The live ledger header reads its version from the installed package metadata.
+
 ## Compatibility Contract
 
 - Runtime target: Node.js 22+

@@ -2,6 +2,8 @@ import { AsyncLocalStorage } from "node:async_hooks";
 
 import { LaquOutputError, OutputCoordinator } from "./output-coordinator.js";
 import { chooseRenderer } from "./renderer.js";
+import { packageVersion } from "./package-info.js";
+import { updateNotifier } from "./update-notifier.js";
 import {
   advanceProgress,
   ratioProgress,
@@ -81,6 +83,16 @@ export function createProgressRuntime(options: RuntimeOptions = {}): ProgressRun
     if (options.manageProcessLifecycle === true) {
       runtime.manageProcessLifecycle();
     }
+    if (
+      (options.checkForUpdates ?? stderr === process.stderr) &&
+      decision.live &&
+      capability === "tty" &&
+      stderr.isTTY === true &&
+      env["CI"] === undefined &&
+      env["TERM"] !== "dumb"
+    ) {
+      runtime.checkForUpdates();
+    }
     return runtime;
   } catch (error) {
     runtime?.disposeInfrastructure();
@@ -100,6 +112,7 @@ class LaquRuntime implements ProgressRuntime {
   #state: RuntimeState = "open";
   #processLifecycle: ProcessLifecycleLease | undefined;
   #terminalResizeCleanup: (() => void) | undefined;
+  #updateCheckCleanup: (() => void) | undefined;
   readonly #handles = new Set<StoreTaskHandle>();
   readonly #taskCloseContext = new AsyncLocalStorage<StoreTaskHandle>();
   #activeScopedTasks = 0;
@@ -123,6 +136,8 @@ class LaquRuntime implements ProgressRuntime {
   }
 
   disposeInfrastructure(): void {
+    this.#updateCheckCleanup?.();
+    this.#updateCheckCleanup = undefined;
     this.#processLifecycle?.dispose();
     this.#processLifecycle = undefined;
     this.#terminalResizeCleanup?.();
@@ -252,6 +267,15 @@ class LaquRuntime implements ProgressRuntime {
     });
   }
 
+  checkForUpdates(): void {
+    this.#updateCheckCleanup = updateNotifier.subscribe((latest) => {
+      if (this.#state !== "open") return;
+      this.log(
+        `Update available: laqu ${packageVersion} → ${latest}. Run npm install @0disoft/laqu@latest`,
+      );
+    });
+  }
+
   async #closeForProcessTermination(): Promise<void> {
     this.#beginDraining();
     await waitForSettlement(this.#finalize(), fatalShutdownTimeoutMs);
@@ -368,6 +392,8 @@ class LaquRuntime implements ProgressRuntime {
 
   #beginDraining(): void {
     if (this.#state === "open") {
+      this.#updateCheckCleanup?.();
+      this.#updateCheckCleanup = undefined;
       this.#state = "draining";
     }
   }
@@ -752,6 +778,9 @@ function normalizedRows(rows: number | undefined, maxRows: number): number {
 function assertRuntimeOptions(options: RuntimeOptions): void {
   if (typeof options !== "object" || options === null || Array.isArray(options)) {
     throw new TypeError("runtime options must be an object");
+  }
+  if (options.checkForUpdates !== undefined && typeof options.checkForUpdates !== "boolean") {
+    throw new TypeError("checkForUpdates must be a boolean");
   }
   assertStreamTarget(options.stdout, "stdout");
   assertStreamTarget(options.stderr, "stderr");

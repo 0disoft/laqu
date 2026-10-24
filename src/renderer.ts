@@ -1,4 +1,5 @@
 import { logEvent, summaryEvent, taskEvent, type LaquEvent } from "./events.js";
+import { packageVersion } from "./package-info.js";
 import { renderSegments, text, type CompiledTheme } from "./theme.js";
 import type { OutputFormat, ProgressPolicy, StreamCapability } from "./types.js";
 import { displayWidth, sanitizeText, truncateToColumns } from "./width.js";
@@ -238,8 +239,9 @@ function rowsForSnapshot(
   }
   if (decorated && layout !== undefined) {
     const rule = theme.format(text("─".repeat(columns), "muted"));
+    const heading = `laqu ${packageVersion}`;
     output.unshift(
-      `${theme.format(text("laqu", "accent"))}  ${theme.format(text("─".repeat(columns - 6), "muted"))}`,
+      `${theme.format(text("laqu", "accent"))} ${theme.format(text(packageVersion, "muted"))}  ${theme.format(text("─".repeat(Math.max(0, columns - displayWidth(heading) - 2)), "muted"))}`,
       theme.format(
         text(ledgerCells(["TASK", "PROGRESS", "COUNT", "%", "STATE"], layout, theme), "muted"),
       ),

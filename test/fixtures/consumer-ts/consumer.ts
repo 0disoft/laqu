@@ -15,6 +15,7 @@ const runtime: ProgressRuntime = createLaqu({
   format: "json",
   progressPolicy: "silent",
   manageProcessLifecycle: false,
+  checkForUpdates: false,
 });
 const task = runtime.createTask("consumer types", { ratio: 0.25 });
 task.setPercent(50);
