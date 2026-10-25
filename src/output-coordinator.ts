@@ -113,6 +113,16 @@ export class OutputCoordinator {
     this.#fail(error);
   }
 
+  canWriteImmediately(): boolean {
+    return (
+      !this.lease.closed &&
+      this.#outputError === undefined &&
+      !this.#waitingForDrain &&
+      this.#pendingCount === 0 &&
+      this.#pendingWrites.size === 0
+    );
+  }
+
   writeFrame(frame: Frame): void {
     if (frame.kind === "none" || this.lease.closed || this.#outputError !== undefined) {
       return;

@@ -271,6 +271,17 @@ mutation order. Pending task and log records are bounded to 4096; exceeding the 
 `LAQU_OUTPUT_BUFFER_OVERFLOW` instead of silently dropping task transitions. `retention.maxLogs`
 may intentionally omit older logs that have not yet been emitted.
 
+Synchronous bursts are drained in batches when the status stream can complete writes immediately.
+For large loops using asynchronous or backpressured streams, yield regularly so delivery can finish:
+
+```ts
+for (let index = 0; index < items.length; index++) {
+  progress.createTask(`item ${index}`).succeed();
+  if ((index + 1) % 500 === 0) await progress.flush();
+}
+await progress.close();
+```
+
 Plain and machine-readable frames are queued in order while the status stream is backpressured.
 The queue is bounded to 4096 pending frames. A write exception, stream termination, drain timeout,
 unsupported backpressure contract, or buffer overflow becomes a sticky `LaquOutputError` returned

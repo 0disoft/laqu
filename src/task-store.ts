@@ -243,6 +243,14 @@ export class TaskStore {
     }
   }
 
+  needsOutputDrain(): boolean {
+    return this.#outputRecords.length >= 1_024;
+  }
+
+  get outputOverflowed(): boolean {
+    return this.#outputOverflowed;
+  }
+
   snapshot(incrementalOutput = false): RuntimeSnapshot {
     const incremental = incrementalOutput && this.#recordOutput;
     const snapshot = {

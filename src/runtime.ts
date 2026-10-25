@@ -109,6 +109,7 @@ class LaquRuntime implements ProgressRuntime {
   #gracefulClosePromise: Promise<void> | undefined;
   #finalizePromise: Promise<void> | undefined;
   #dirty = false;
+  #renderingOutputBatch = false;
   #state: RuntimeState = "open";
   #processLifecycle: ProcessLifecycleLease | undefined;
   #terminalResizeCleanup: (() => void) | undefined;
@@ -357,6 +358,33 @@ class LaquRuntime implements ProgressRuntime {
       return;
     }
     this.#dirty = true;
+    if (this.store.outputOverflowed) {
+      this.coordinator.reportFailure(
+        new LaquOutputError(
+          "LAQU_OUTPUT_BUFFER_OVERFLOW",
+          "task and log output exceeded 4096 pending records",
+        ),
+      );
+      return;
+    }
+    if (
+      !this.#renderingOutputBatch &&
+      this.store.needsOutputDrain() &&
+      this.coordinator.canWriteImmediately()
+    ) {
+      this.#renderingOutputBatch = true;
+      try {
+        this.coordinator.render(this.store.snapshot(true));
+      } catch (error) {
+        this.coordinator.reportFailure(
+          new LaquOutputError("LAQU_OUTPUT_WRITE_FAILED", "status output batch failed", {
+            cause: error,
+          }),
+        );
+      } finally {
+        this.#renderingOutputBatch = false;
+      }
+    }
     if (immediate) {
       this.#flushInBackground();
       return;
