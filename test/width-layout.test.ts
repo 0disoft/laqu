@@ -65,6 +65,28 @@ test("width corpus covers East Asian text and Unicode emoji presentation", () =>
   strictEqual(displayWidth("abc\tz", { tabSize: 8 }), 9);
 });
 
+test("decomposed Hangul has composed cell widths without changing output text", () => {
+  const decomposed = "한글".normalize("NFD");
+  for (const ambiguousWidth of [1, 2] as const) {
+    const options = { ambiguousWidth };
+    for (const syllable of ["가", "각", "한", "글", "힣"]) {
+      strictEqual(displayWidth(syllable.normalize("NFD"), options), 2);
+    }
+    strictEqual(displayWidth("가\u11a8", options), 2);
+    strictEqual(displayWidth(decomposed, options), 4);
+    strictEqual(truncateToColumns(decomposed, 4, options), decomposed);
+    strictEqual(truncateToColumns(decomposed, 2, options), "한".normalize("NFD"));
+    deepStrictEqual(wrapToColumns(decomposed, 4, options), [decomposed]);
+    deepStrictEqual(wrapToColumns(decomposed, 2, options), [
+      "한".normalize("NFD"),
+      "글".normalize("NFD"),
+    ]);
+    const styled = `\u001b[31m${decomposed}\u001b[0m`;
+    strictEqual(truncateToColumns(styled, 4, options), styled);
+  }
+  strictEqual(displayWidth("e\u0301", { ambiguousWidth: 2 }), 1);
+});
+
 test("width-sensitive helpers preserve grapheme and column invariants across the corpus", () => {
   const corpus = ["©", "©️", "1️⃣", "שְ", "👩‍💻", "👍🏽", "🇰🇷", "한글", "e\u0301"];
 

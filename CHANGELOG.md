@@ -5,6 +5,11 @@ Notable user-facing changes to `@0disoft/laqu` are recorded here. The project fo
 
 ## [Unreleased]
 
+### Fixed
+
+- Measured canonically decomposed Hangul using composed syllable widths while preserving the
+  original text through clipping and wrapping.
+
 ## [2.1.1] - 2026-10-25
 
 Version 2.1.0 was not published: release verification caught a bundled-consumer test path that

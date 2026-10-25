@@ -31,6 +31,7 @@ const unsafeControlPattern = new RegExp(String.raw`[\u0000-\u0008\u000a-\u001f\u
 const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 const markOnlyPattern = /^\p{Mark}+$/u;
 const markPattern = /\p{Mark}/u;
+const hangulJamoPattern = /[\u1100-\u11ff]/u;
 const defaultIgnorablePattern = /\p{Default_Ignorable_Code_Point}/u;
 const emojiPattern = /\p{Emoji}/u;
 const emojiPresentationPattern = /\p{Emoji_Presentation}/u;
@@ -277,7 +278,9 @@ function clusterWidth(cluster: string, ambiguousWidth: 1 | 2): number {
   }
 
   let width = 0;
-  for (const char of Array.from(cluster)) {
+  // Compose Hangul only for measurement; callers retain the original grapheme text.
+  const measured = hangulJamoPattern.test(cluster) ? cluster.normalize("NFC") : cluster;
+  for (const char of measured) {
     const codePoint = char.codePointAt(0);
     if (codePoint === undefined) {
       continue;
