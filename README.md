@@ -10,7 +10,11 @@
 lists, or other caller-owned output. Human status goes to stderr by default; CI-safe text and
 versioned JSON/NDJSON events use the same task model when a terminal UI is not appropriate.
 
-![Laqu rendering concurrent CLI tasks while stdout stays available for JSON](media/terminal-preview.svg)
+![Laqu live progress with aligned task and progress columns](media/terminal-preview.svg)
+
+The preview is generated from the live renderer at 100 terminal columns. Column positions adapt to
+your terminal width; colors follow your terminal theme. Regenerate it with
+`bun run build && node tools/generate-terminal-preview.mjs`.
 
 ```text
 laqu 2.1.1  ────────────────────────────────────────────────────────────────────
