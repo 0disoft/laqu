@@ -369,7 +369,9 @@ export class TaskStore {
     const path: string[] = [];
     let current: TaskNode | undefined = node;
     while (current !== undefined) {
-      this.#snapshotCache.delete(current.id);
+      const hadSnapshot = this.#snapshotCache.delete(current.id);
+      // This node's ancestors are already invalidated unless a snapshot was rebuilt.
+      if (!hadSnapshot && this.#changedTaskIds.has(current.id)) break;
       path.push(current.id);
       current = current.parentId === undefined ? undefined : this.#tasks.get(current.parentId);
     }
