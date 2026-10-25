@@ -209,7 +209,7 @@ function renderLogLines(
   theme: CompiledTheme,
   columns: number,
 ): string[] {
-  return logs.map((log) => truncateToColumns(sanitizeText(log.message), columns, theme.tokens));
+  return logs.flatMap((log) => wrapToColumns(sanitizeText(log.message), columns, theme.tokens));
 }
 
 function logsAfterSequence(logs: readonly LogRecord[], seenSequence: number): readonly LogRecord[] {

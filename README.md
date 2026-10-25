@@ -212,6 +212,10 @@ await progress.close();
 
 Logs are separate scrollback records. They are not rendered as task rows and they pass through the same output coordinator as progress frames so live regions and log lines do not corrupt each other.
 
+Live logs wrap to the current terminal width and preserve the full sanitized message, including
+trailing error causes and long file paths. They are emitted once and do not consume the task row
+budget; later redraws do not repeat previously emitted logs.
+
 ## Process Lifecycle
 
 `laqu` does not install process-level signal or exception handlers by default. Applications that

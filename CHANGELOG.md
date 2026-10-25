@@ -7,6 +7,8 @@ Notable user-facing changes to `@0disoft/laqu` are recorded here. The project fo
 
 ### Fixed
 
+- Wrapped full live log messages to terminal width instead of clipping away trailing error causes,
+  preserving sanitized graphemes without consuming the live task-row budget or repeating logs.
 - Rejected counter arithmetic overflow before mutation and scaled weighted aggregates to keep
   finite event values, including the accumulated contribution of pruned children.
 - Drained synchronous task/log bursts in bounded batches when the output stream is immediately

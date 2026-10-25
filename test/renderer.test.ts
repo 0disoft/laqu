@@ -10,11 +10,33 @@ import type {
   RuntimeSnapshot,
   TaskSnapshot,
 } from "../src/task-store.js";
-import { displayWidth, stripAnsi } from "../src/width.js";
+import { displayWidth, sanitizeText, stripAnsi } from "../src/width.js";
 
 const theme = compileTheme({ useColor: false });
 const noneProgress: ProgressState = { kind: "none" };
 const noneAggregate: AggregateProgress = { kind: "none" };
+
+for (const columns of [8, 24]) {
+  test(`live logs preserve the full cause and graphemes across ${columns}-column lines`, () => {
+    const store = new TaskStore();
+    store.createTask("active task");
+    const message = `\u001b[2J${"한글".normalize("NFD")}/👩‍💻/${"nested/".repeat(8)}report.json: permission denied`;
+    store.addLog(message);
+    const renderer = new AnsiLiveRenderer(theme, columns, 2);
+    const frame = renderer.render(store.snapshot());
+    if (frame.kind !== "live") throw new Error("expected live frame");
+    strictEqual(frame.scrollbackLines.length > 1, true);
+    strictEqual(frame.scrollbackLines.join(""), sanitizeText(message));
+    strictEqual(
+      frame.scrollbackLines.every((line) => displayWidth(line) <= columns),
+      true,
+    );
+    strictEqual(frame.lines.length <= 2, true);
+    const repeated = renderer.render(store.snapshot());
+    if (repeated.kind !== "live") throw new Error("expected live frame");
+    deepStrictEqual(repeated.scrollbackLines, []);
+  });
+}
 
 test("late failures stay visible and are recorded once in live scrollback", () => {
   const store = new TaskStore({ maxTerminalTasks: 0 });
