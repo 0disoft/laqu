@@ -5,8 +5,20 @@ Notable user-facing changes to `@0disoft/laqu` are recorded here. The project fo
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-10-25
+
+### Added
+
+- Added a responsive live ledger with aligned task, progress, count, percentage, and state columns.
+- Added the installed version to the live header and optional background stable-version notices
+  with bounded requests, a 24-hour cache, and cancellation when runtimes close.
+
 ### Fixed
 
+- Validated task updates before mutating lifecycle state and preserved live layout across
+  consecutive terminal resizes.
+- Bounded grapheme traversal when clipping long terminal text and used a ring buffer for retained
+  logs to avoid shifting the full retention window for every new log.
 - Released consumed plain and JSON frames and compacted empty queue slots during continuous
   backpressure, preventing processed output from accumulating while the pending queue stays small.
 - Skipped full task-tree snapshots during silent and never-output flushes while preserving
@@ -28,6 +40,12 @@ Notable user-facing changes to `@0disoft/laqu` are recorded here. The project fo
   success. Normal retention resumes after the callback settles.
 - Read error messages once and tolerate throwing prototype checks, preserving original scoped
   failures and terminal status when a caller throws an unusual object or revoked Proxy.
+
+### Compatibility
+
+- Package exports, event schema version `1`, and Node.js 22+ support remain unchanged.
+- The new `checkForUpdates` option is backward compatible. Checks are limited to human TTY output
+  outside CI and can be disabled with `checkForUpdates: false`.
 
 ## [2.0.0] - 2026-09-27
 
@@ -96,6 +114,8 @@ Notable user-facing changes to `@0disoft/laqu` are recorded here. The project fo
 
 - Adopted the TypeScript 7 toolchain.
 
+[Unreleased]: https://github.com/0disoft/laqu/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/0disoft/laqu/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/0disoft/laqu/compare/v1.1.9...v2.0.0
 [1.1.9]: https://github.com/0disoft/laqu/compare/v1.1.8...v1.1.9
 [1.1.8]: https://github.com/0disoft/laqu/releases/tag/v1.1.8

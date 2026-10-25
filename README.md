@@ -13,7 +13,7 @@ versioned JSON/NDJSON events use the same task model when a terminal UI is not a
 ![Laqu rendering concurrent CLI tasks while stdout stays available for JSON](media/terminal-preview.svg)
 
 ```text
-laqu 2.0.0  ────────────────────────────────────────────────────────────────────
+laqu 2.1.0  ────────────────────────────────────────────────────────────────────
 TASK                    PROGRESS                 COUNT      %  STATE
 ────────────────────────────────────────────────────────────────────────────────
 › install packages      [███████████████░░░░░]  76/100    76%  downloading
@@ -38,7 +38,7 @@ later screen redraws or task retention do not erase already-written scrollback.
 Standalone indeterminate tasks use the theme's indeterminate symbol at every terminal width;
 `mixed` describes an aggregate containing children with unknown progress.
 
-The live header displays the package version, for example `laqu 2.0.0`. Builds embed the version from
+The live header displays the package version, for example `laqu 2.1.0`. Builds embed the version from
 `package.json`, so bundled CLIs do not need Laqu's package files at runtime to display it.
 Interactive human output on the default stderr checks npm's public registry for a newer stable
 version in the background. A successful check is cached for 24 hours in the user's cache directory
@@ -48,7 +48,7 @@ Checks use a 1.5-second network timeout, accept at most 8 KiB, and never wait du
 At most one notice is displayed per process, through live scrollback on the status stream:
 
 ```text
-Update available: laqu 2.0.0 → 2.1.0. Run npm install @0disoft/laqu@latest
+Update available: laqu 2.1.0 → 2.2.0. Run npm install @0disoft/laqu@latest
 ```
 
 CI, dumb terminals,
@@ -422,11 +422,11 @@ supported runtime, Node.js 22. The three-platform matrix runs on Node.js 24.
 
 ## Release
 
-GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v2.0.0` for version `2.0.0`.
+GitHub Actions publishes npm releases from maintainer-created version tags. The tag must match `package.json` exactly, for example `v2.1.0` for version `2.1.0`.
 
 ```sh
-git tag -a v2.0.0 -m "v2.0.0"
-git push origin main v2.0.0
+git tag -a v2.1.0 -m "v2.1.0"
+git push origin main v2.1.0
 ```
 
 The npm package must define a Trusted Publisher connection for GitHub Actions with organization/user `0disoft`, repository `laqu`, workflow filename `release.yml`, environment name `npm`, and `npm publish` allowed. The GitHub repository must also define an `npm` environment with required reviewers and a deployment tag rule that allows only `v*.*.*` tags.
