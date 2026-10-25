@@ -114,12 +114,12 @@ export class OutputCoordinator {
   }
 
   canWriteImmediately(): boolean {
+    // Pending completion callbacks do not block writes accepted without backpressure.
     return (
       !this.lease.closed &&
       this.#outputError === undefined &&
       !this.#waitingForDrain &&
-      this.#pendingCount === 0 &&
-      this.#pendingWrites.size === 0
+      this.#pendingCount === 0
     );
   }
 

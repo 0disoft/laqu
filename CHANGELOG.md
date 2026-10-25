@@ -7,6 +7,8 @@ Notable user-facing changes to `@0disoft/laqu` are recorded here. The project fo
 
 ### Fixed
 
+- Allowed bounded output batches on accepting Node.js Writable streams while completion callbacks
+  are pending, preventing false buffer overflows without bypassing backpressure or flush waits.
 - Stopped repeated ancestor invalidation once a task is already dirty and uncached, avoiding a
   full ancestry walk for every progress update while still invalidating rebuilt lifecycle snapshots.
 - Wrapped full live log messages to terminal width instead of clipping away trailing error causes,
