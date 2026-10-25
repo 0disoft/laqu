@@ -82,12 +82,16 @@ interface TaskNode {
   prunedChildren: PrunedChildren | undefined;
 }
 
-interface PrunedChildren {
-  count: number;
+interface WeightedProgress {
   weightedRatio: number;
   totalWeight: number;
-  mixed: boolean;
+  weightScale: number;
   overrun: boolean;
+}
+
+interface PrunedChildren extends WeightedProgress {
+  count: number;
+  mixed: boolean;
 }
 
 type TaskNodeUpdate = Partial<
@@ -512,15 +516,14 @@ export class TaskStore {
         count: 0,
         weightedRatio: 0,
         totalWeight: 0,
+        weightScale: 0,
         mixed: false,
         overrun: false,
       });
       pruned.count += 1;
       if (node.weight > 0) {
         if (aggregate.kind === "ratio") {
-          pruned.weightedRatio += aggregate.ratio * node.weight;
-          pruned.totalWeight += node.weight;
-          pruned.overrun ||= aggregate.overrun;
+          addWeightedProgress(pruned, aggregate, node.weight);
         } else {
           pruned.mixed = true;
         }
@@ -565,13 +568,13 @@ export function advanceProgress(delta: number, previous: ProgressState): Progres
   if (!Number.isFinite(delta)) {
     throw new TypeError("delta must be finite");
   }
-  if (previous.kind === "determinate") {
-    return determinate(Math.max(0, previous.current + delta), previous.total);
-  }
-  if (previous.kind === "counter") {
-    return { kind: "counter", current: Math.max(0, previous.current + delta) };
-  }
-  return { kind: "counter", current: Math.max(0, delta) };
+  const previousCurrent =
+    previous.kind === "determinate" || previous.kind === "counter" ? previous.current : 0;
+  const current = Math.max(0, previousCurrent + delta);
+  assertFiniteNonNegative(current, "advanced completed");
+  return previous.kind === "determinate"
+    ? determinate(current, previous.total)
+    : { kind: "counter", current };
 }
 
 export function ratioProgress(ratio: number): ProgressState {
@@ -618,9 +621,12 @@ function aggregateProgress(
   if (pruned?.mixed === true) {
     return { kind: "mixed" };
   }
-  let weightedRatio = pruned?.weightedRatio ?? 0;
-  let totalWeight = pruned?.totalWeight ?? 0;
-  let overrun = pruned?.overrun ?? false;
+  const combined: WeightedProgress = {
+    weightedRatio: pruned?.weightedRatio ?? 0,
+    totalWeight: pruned?.totalWeight ?? 0,
+    weightScale: pruned?.weightScale ?? 0,
+    overrun: pruned?.overrun ?? false,
+  };
 
   for (const child of children) {
     if (child.weight === 0) {
@@ -629,16 +635,36 @@ function aggregateProgress(
     if (child.aggregate.kind === "mixed" || child.aggregate.kind === "none") {
       return { kind: "mixed" };
     }
-    weightedRatio += child.aggregate.ratio * child.weight;
-    totalWeight += child.weight;
-    overrun = overrun || child.aggregate.overrun;
+    addWeightedProgress(combined, child.aggregate, child.weight);
   }
 
-  if (totalWeight === 0) {
+  if (combined.totalWeight === 0) {
     return { kind: "none" };
   }
 
-  return { kind: "ratio", ratio: clamp01(weightedRatio / totalWeight), overrun };
+  return {
+    kind: "ratio",
+    ratio: clamp01(combined.weightedRatio / combined.totalWeight),
+    overrun: combined.overrun,
+  };
+}
+
+function addWeightedProgress(
+  combined: WeightedProgress,
+  progress: Extract<AggregateProgress, { readonly kind: "ratio" }>,
+  weight: number,
+): void {
+  // Normalize by the largest weight, including the retained contribution of pruned children.
+  if (weight > combined.weightScale) {
+    const scale = combined.weightScale / weight;
+    combined.weightedRatio *= scale;
+    combined.totalWeight *= scale;
+    combined.weightScale = weight;
+  }
+  const normalizedWeight = weight / combined.weightScale;
+  combined.weightedRatio += progress.ratio * normalizedWeight;
+  combined.totalWeight += normalizedWeight;
+  combined.overrun ||= progress.overrun;
 }
 
 function aggregateFromProgress(progress: ProgressState): AggregateProgress {

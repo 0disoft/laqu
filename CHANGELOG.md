@@ -7,6 +7,8 @@ Notable user-facing changes to `@0disoft/laqu` are recorded here. The project fo
 
 ### Fixed
 
+- Rejected counter arithmetic overflow before mutation and scaled weighted aggregates to keep
+  finite event values, including the accumulated contribution of pruned children.
 - Drained synchronous task/log bursts in bounded batches when the output stream is immediately
   writable, retaining the pending-record limit and backpressure failure behavior for blocked sinks.
 - Reused immutable task snapshots and restricted plain/JSON output comparisons to changed tasks

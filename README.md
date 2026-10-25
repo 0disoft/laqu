@@ -188,6 +188,9 @@ await progress.close();
 ```
 
 The API avoids ambiguous calls such as `update(42)`. Use `setCompleted(42)` for absolute progress and `advance(42)` for a delta.
+
+Counters must remain finite: an overflowing `advance()` throws before changing task state.
+Large finite child weights remain supported, including after completed children are pruned.
 Manual tasks also honor `TaskOptions.signal`; aborting the signal marks the task cancelled with the message `aborted`. Use `task.skip(message)` for intentionally skipped work such as cache hits, disabled feature branches, or already up-to-date steps.
 
 After `progress.close()` starts, the runtime stops accepting new root tasks, caller logs, and manual
