@@ -5,7 +5,10 @@ Notable user-facing changes to `@0disoft/laqu` are recorded here. The project fo
 
 ## [Unreleased]
 
-## [2.1.0] - 2026-10-25
+## [2.1.1] - 2026-10-25
+
+Version 2.1.0 was not published: release verification caught a bundled-consumer test path that
+older Bun versions interpreted as a package specifier. The fixture now uses an absolute entry path.
 
 ### Added
 
@@ -114,8 +117,8 @@ Notable user-facing changes to `@0disoft/laqu` are recorded here. The project fo
 
 - Adopted the TypeScript 7 toolchain.
 
-[Unreleased]: https://github.com/0disoft/laqu/compare/v2.1.0...HEAD
-[2.1.0]: https://github.com/0disoft/laqu/compare/v2.0.0...v2.1.0
+[Unreleased]: https://github.com/0disoft/laqu/compare/v2.1.1...HEAD
+[2.1.1]: https://github.com/0disoft/laqu/compare/v2.0.0...v2.1.1
 [2.0.0]: https://github.com/0disoft/laqu/compare/v1.1.9...v2.0.0
 [1.1.9]: https://github.com/0disoft/laqu/compare/v1.1.8...v1.1.9
 [1.1.8]: https://github.com/0disoft/laqu/releases/tag/v1.1.8

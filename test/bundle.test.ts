@@ -14,7 +14,7 @@ test("bundled CLI runs without laqu package files or node_modules", () => {
       "bun",
       [
         "build",
-        "test/fixtures/bundled-consumer.mjs",
+        resolve("test/fixtures/bundled-consumer.mjs"),
         "--target=node",
         "--format=esm",
         "--outfile",
