@@ -141,7 +141,7 @@ export class PlainLogRenderer implements Renderer {
     this.#seenLogSequence = lastLogSequence(snapshot.logs, this.#seenLogSequence);
 
     const rows = flattenTasks(snapshot.tasks);
-    pruneSeenTaskStates(this.#seenTaskStates, rows);
+    pruneSeenTaskStates(this.#seenTaskStates, rows, snapshot.removedTaskIds);
 
     for (const row of rows) {
       const state = humanTaskStateKey(row);
@@ -179,7 +179,7 @@ export class JsonEventRenderer implements Renderer {
       }
     }
     this.#seenLogSequence = lastLogSequence(snapshot.logs, this.#seenLogSequence);
-    pruneSeenTaskStates(this.#seenTaskStates, tasks);
+    pruneSeenTaskStates(this.#seenTaskStates, tasks, snapshot.removedTaskIds);
 
     for (const task of tasks) {
       const state = taskStateKey(task);
@@ -434,7 +434,12 @@ function flattenTasks(tasks: readonly TaskSnapshot[]): TaskSnapshot[] {
 function pruneSeenTaskStates(
   seenTaskStates: Map<string, string>,
   currentTasks: readonly TaskSnapshot[],
+  removedTaskIds?: readonly string[],
 ): void {
+  if (removedTaskIds !== undefined) {
+    for (const id of removedTaskIds) seenTaskStates.delete(id);
+    return;
+  }
   const currentIds = new Set(currentTasks.map((task) => task.id));
   for (const id of seenTaskStates.keys()) {
     if (!currentIds.has(id)) {

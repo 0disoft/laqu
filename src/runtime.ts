@@ -293,7 +293,7 @@ class LaquRuntime implements ProgressRuntime {
         this.#timer = undefined;
       }
       this.#dirty = false;
-      const snapshot = this.store.snapshot();
+      const snapshot = this.store.snapshot(true);
       if (snapshot.outputOverflowed === true) {
         this.coordinator.reportFailure(
           new LaquOutputError(
@@ -330,7 +330,7 @@ class LaquRuntime implements ProgressRuntime {
         outputFailure = error;
       }
       try {
-        this.coordinator.finalize(this.store.snapshot());
+        this.coordinator.finalize(this.store.snapshot(true));
       } catch (error) {
         outputFailure ??= error;
       }

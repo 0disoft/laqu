@@ -43,6 +43,7 @@ export interface RuntimeSnapshot {
   readonly createdAt: number;
   readonly outputRecords?: readonly OutputRecord[];
   readonly outputOverflowed?: boolean;
+  readonly removedTaskIds?: readonly string[];
 }
 
 export type OutputRecord =
@@ -97,6 +98,9 @@ export class TaskStore {
   readonly #tasks = new Map<string, TaskNode>();
   readonly #activeScopes = new Set<string>();
   readonly #rootIds = new Set<string>();
+  readonly #changedTaskIds = new Set<string>();
+  readonly #removedTaskIds = new Set<string>();
+  readonly #snapshotCache = new Map<string, TaskSnapshot>();
   readonly #logs: LogRecord[] = [];
   #logHead = 0;
   readonly #pendingTerminalSnapshots: string[] = [];
@@ -170,6 +174,7 @@ export class TaskStore {
       parent.updatedAt = now;
     }
 
+    this.#markChanged(node);
     this.#recordTaskOutput(node);
 
     return id;
@@ -185,6 +190,7 @@ export class TaskStore {
     }
     const previousStatus = node.status;
     applyUpdate(node, update);
+    this.#markChanged(node);
     this.#recordStatusTransition(node.id, previousStatus, node.status);
   }
 
@@ -195,6 +201,7 @@ export class TaskStore {
     }
     const previousStatus = node.status;
     applyUpdate(node, update);
+    this.#markChanged(node);
     this.#recordStatusTransition(node.id, previousStatus, node.status);
   }
 
@@ -236,12 +243,16 @@ export class TaskStore {
     }
   }
 
-  snapshot(): RuntimeSnapshot {
+  snapshot(incrementalOutput = false): RuntimeSnapshot {
+    const incremental = incrementalOutput && this.#recordOutput;
     const snapshot = {
-      tasks: this.#snapshotTasks(),
+      tasks: incremental
+        ? this.#snapshotTasks([...this.#changedTaskIds]).map((task) => ({ ...task, children: [] }))
+        : this.#snapshotTasks(),
       logs: this.#snapshotLogs(),
       summary: { ...this.#summaryCounts },
       createdAt: Date.now(),
+      ...(incremental ? { removedTaskIds: [...this.#removedTaskIds] } : {}),
       ...(this.#recordOutput
         ? {
             outputRecords: this.#drainOutputRecords(),
@@ -249,6 +260,8 @@ export class TaskStore {
           }
         : {}),
     };
+    this.#changedTaskIds.clear();
+    this.#removedTaskIds.clear();
     this.#pruneTerminalTasks();
     this.#markTerminalTasksSnapshotted();
     return snapshot;
@@ -288,7 +301,7 @@ export class TaskStore {
   }
 
   #snapshotTasks(rootIds: readonly string[] = [...this.#rootIds]): readonly TaskSnapshot[] {
-    const snapshots = new Map<string, TaskSnapshot>();
+    const snapshots = this.#snapshotCache;
     const stack: { readonly id: string; readonly depth: number; readonly visited: boolean }[] = [];
 
     for (let index = rootIds.length - 1; index >= 0; index -= 1) {
@@ -301,6 +314,9 @@ export class TaskStore {
     while (stack.length > 0) {
       const item = stack.pop();
       if (item === undefined) {
+        continue;
+      }
+      if (snapshots.has(item.id)) {
         continue;
       }
       const node = this.#requireNode(item.id);
@@ -335,6 +351,21 @@ export class TaskStore {
     }
 
     return rootIds.map((id) => requireSnapshot(snapshots, id));
+  }
+
+  #markChanged(node: TaskNode): void {
+    const path: string[] = [];
+    let current: TaskNode | undefined = node;
+    while (current !== undefined) {
+      this.#snapshotCache.delete(current.id);
+      path.push(current.id);
+      current = current.parentId === undefined ? undefined : this.#tasks.get(current.parentId);
+    }
+    // Parents precede their changed descendants without scanning unrelated retained tasks.
+    for (let index = path.length - 1; index >= 0; index -= 1) {
+      const id = path[index];
+      if (id !== undefined) this.#changedTaskIds.add(id);
+    }
   }
 
   #requireNode(id: string): TaskNode {
@@ -458,6 +489,9 @@ export class TaskStore {
 
   #removeTaskNode(node: TaskNode): void {
     this.#tasks.delete(node.id);
+    this.#snapshotCache.delete(node.id);
+    this.#changedTaskIds.delete(node.id);
+    if (this.#recordOutput) this.#removedTaskIds.add(node.id);
     this.#retainedTerminalTasks -= 1;
     if (node.parentId === undefined) {
       this.#rootIds.delete(node.id);
@@ -484,6 +518,7 @@ export class TaskStore {
         }
       }
       parent.children.delete(node.id);
+      this.#markChanged(parent);
       this.#enqueuePruneCandidate(parent);
     }
   }

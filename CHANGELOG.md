@@ -7,6 +7,8 @@ Notable user-facing changes to `@0disoft/laqu` are recorded here. The project fo
 
 ### Fixed
 
+- Reused immutable task snapshots and restricted plain/JSON output comparisons to changed tasks
+  and their ancestors, without reducing terminal-task retention or dropping lifecycle records.
 - Measured canonically decomposed Hangul using composed syllable widths while preserving the
   original text through clipping and wrapping.
 
