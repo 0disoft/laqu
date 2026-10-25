@@ -5,6 +5,8 @@ Notable user-facing changes to `@0disoft/laqu` are recorded here. The project fo
 
 ## [Unreleased]
 
+## [2.1.2] - 2026-10-25
+
 ### Fixed
 
 - Allowed bounded output batches on accepting Node.js Writable streams while completion callbacks
@@ -134,7 +136,8 @@ older Bun versions interpreted as a package specifier. The fixture now uses an a
 
 - Adopted the TypeScript 7 toolchain.
 
-[Unreleased]: https://github.com/0disoft/laqu/compare/v2.1.1...HEAD
+[Unreleased]: https://github.com/0disoft/laqu/compare/v2.1.2...HEAD
+[2.1.2]: https://github.com/0disoft/laqu/compare/v2.1.1...v2.1.2
 [2.1.1]: https://github.com/0disoft/laqu/compare/v2.0.0...v2.1.1
 [2.0.0]: https://github.com/0disoft/laqu/compare/v1.1.9...v2.0.0
 [1.1.9]: https://github.com/0disoft/laqu/compare/v1.1.8...v1.1.9
